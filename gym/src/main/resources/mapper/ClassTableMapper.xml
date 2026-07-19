@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.gym.mapper.ClassTableMapper">
+    <select id="getAllClasses" resultType="com.gym.entity.ClassTable">
+        SELECT * FROM class_table
+    </select>
+
+    <select id="getClassById" resultType="com.gym.entity.ClassTable">
+        SELECT * FROM class_table WHERE class_id = #{classId}
+    </select>
+
+    <insert id="addClass" parameterType="com.gym.entity.ClassTable">
+        INSERT INTO class_table (class_name, class_begin, class_time, coach)
+        VALUES (#{className}, #{classBegin}, #{classTime}, #{coach})
+    </insert>
+
+    <update id="updateClass" parameterType="com.gym.entity.ClassTable">
+        UPDATE class_table SET
+        class_name = #{className},
+        class_begin = #{classBegin},
+        class_time = #{classTime},
+        coach = #{coach}
+        WHERE class_id = #{classId}
+    </update>
+
+    <delete id="deleteClass">
+        DELETE FROM class_table WHERE class_id = #{classId}
+    </delete>
+</mapper>
