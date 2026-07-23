@@ -14,4 +14,7 @@ public interface MainServerClient {
 
     @GetMapping("/api/member/{account}")
     Map<String, Object> getMember(@PathVariable("account") Integer account);
+
+    @GetMapping("/api/employee/{account}")
+    Map<String, Object> getEmployee(@PathVariable("account") Integer account);
 }

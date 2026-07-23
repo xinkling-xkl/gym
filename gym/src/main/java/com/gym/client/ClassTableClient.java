@@ -5,7 +5,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
 
-@FeignClient(name = "main-server")
+@FeignClient(name = "main-server", contextId = "classTableClient")
 public interface ClassTableClient {
 
     @GetMapping("/api/class/list")

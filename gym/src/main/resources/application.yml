@@ -6,6 +6,17 @@ spring:
     name: main-server
   config:
     import: "nacos:common.yaml?group=DEFAULT_GROUP"
+  cloud:
+    nacos:
+      discovery:
+        server-addr: 192.168.80.1:8848
+      config:
+        server-addr: 192.168.80.1:8848
+    sentinel:
+      transport:
+        dashboard: localhost:8858
+        port: 8721
+      eager: true
   datasource:
     url: jdbc:mysql://localhost:3306/gym?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
 

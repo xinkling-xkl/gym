@@ -8,7 +8,8 @@ public interface ClassOrderService {
     List<ClassOrder> getAllOrders();
     ClassOrder getOrderById(Integer classOrderId);
     List<ClassOrder> getOrdersByMemberAccount(String memberAccount);
-    void addOrder(ClassOrder classOrder);
+    int addOrder(ClassOrder classOrder);
     void updateOrder(ClassOrder classOrder);
     void deleteOrder(Integer classOrderId);
+    boolean cancelOrder(Integer classOrderId);
 }

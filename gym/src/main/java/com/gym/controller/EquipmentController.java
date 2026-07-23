@@ -1,13 +1,14 @@
 package com.gym.controller;
 
+import com.alibaba.csp.sentinel.annotation.SentinelResource;
+import com.alibaba.csp.sentinel.slots.block.BlockException;
+import com.gym.common.Result;
 import com.gym.entity.Equipment;
 import com.gym.service.EquipmentService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 @RestController
 @RequestMapping("/api/equipment")
@@ -18,79 +19,44 @@ public class EquipmentController {
     private EquipmentService equipmentService;
 
     @GetMapping("/list")
-    public Map<String, Object> getAllEquipments() {
-        Map<String, Object> result = new HashMap<>();
-        try {
-            List<Equipment> equipments = equipmentService.getAllEquipments();
-            result.put("code", 200);
-            result.put("data", equipments);
-            result.put("message", "查询成功");
-        } catch (Exception e) {
-            result.put("code", 500);
-            result.put("message", "查询失败：" + e.getMessage());
-        }
-        return result;
+    @SentinelResource(value = "equipment-list", blockHandler = "handleBlock")
+    public Result<List<Equipment>> getAllEquipments() {
+        List<Equipment> equipments = equipmentService.getAllEquipments();
+        return Result.success(equipments);
     }
 
     @GetMapping("/{id}")
-    public Map<String, Object> getEquipmentById(@PathVariable Integer id) {
-        Map<String, Object> result = new HashMap<>();
-        try {
-            Equipment equipment = equipmentService.getEquipmentById(id);
-            if (equipment != null) {
-                result.put("code", 200);
-                result.put("data", equipment);
-                result.put("message", "查询成功");
-            } else {
-                result.put("code", 404);
-                result.put("message", "器材不存在");
-            }
-        } catch (Exception e) {
-            result.put("code", 500);
-            result.put("message", "查询失败：" + e.getMessage());
+    @SentinelResource(value = "equipment-get", blockHandler = "handleBlock")
+    public Result<Equipment> getEquipmentById(@PathVariable Integer id) {
+        Equipment equipment = equipmentService.getEquipmentById(id);
+        if (equipment != null) {
+            return Result.success(equipment);
         }
-        return result;
+        return Result.error(404, "器材不存在");
     }
 
     @PostMapping("/add")
-    public Map<String, Object> addEquipment(@RequestBody Equipment equipment) {
-        Map<String, Object> result = new HashMap<>();
-        try {
-            equipmentService.addEquipment(equipment);
-            result.put("code", 200);
-            result.put("message", "添加成功");
-        } catch (Exception e) {
-            result.put("code", 500);
-            result.put("message", "添加失败：" + e.getMessage());
-        }
-        return result;
+    @SentinelResource(value = "equipment-add", blockHandler = "handleBlock")
+    public Result<Void> addEquipment(@RequestBody Equipment equipment) {
+        equipmentService.addEquipment(equipment);
+        return Result.success("添加成功", null);
     }
 
     @PutMapping("/update")
-    public Map<String, Object> updateEquipment(@RequestBody Equipment equipment) {
-        Map<String, Object> result = new HashMap<>();
-        try {
-            equipmentService.updateEquipment(equipment);
-            result.put("code", 200);
-            result.put("message", "更新成功");
-        } catch (Exception e) {
-            result.put("code", 500);
-            result.put("message", "更新失败：" + e.getMessage());
-        }
-        return result;
+    @SentinelResource(value = "equipment-update", blockHandler = "handleBlock")
+    public Result<Void> updateEquipment(@RequestBody Equipment equipment) {
+        equipmentService.updateEquipment(equipment);
+        return Result.success("更新成功", null);
     }
 
     @DeleteMapping("/delete/{id}")
-    public Map<String, Object> deleteEquipment(@PathVariable Integer id) {
-        Map<String, Object> result = new HashMap<>();
-        try {
-            equipmentService.deleteEquipment(id);
-            result.put("code", 200);
-            result.put("message", "删除成功");
-        } catch (Exception e) {
-            result.put("code", 500);
-            result.put("message", "删除失败：" + e.getMessage());
-        }
-        return result;
+    @SentinelResource(value = "equipment-delete", blockHandler = "handleBlock")
+    public Result<Void> deleteEquipment(@PathVariable Integer id) {
+        equipmentService.deleteEquipment(id);
+        return Result.success("删除成功", null);
+    }
+
+    public Result<Void> handleBlock(BlockException e) {
+        return Result.error(429, "请求过于频繁，请稍后再试");
     }
 }

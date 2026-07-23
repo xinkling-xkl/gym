@@ -10,6 +10,7 @@ public class Employee {
     private Date entryTime;
     private String staff;
     private String employeeMessage;
+    private String employeePassword;
 
     public Integer getEmployeeAccount() {
         return employeeAccount;
@@ -65,5 +66,13 @@ public class Employee {
 
     public void setEmployeeMessage(String employeeMessage) {
         this.employeeMessage = employeeMessage;
+    }
+
+    public String getEmployeePassword() {
+        return employeePassword;
+    }
+
+    public void setEmployeePassword(String employeePassword) {
+        this.employeePassword = employeePassword;
     }
 }

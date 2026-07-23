@@ -10,8 +10,8 @@
     </select>
 
     <insert id="addEmployee" parameterType="com.gym.entity.Employee">
-        INSERT INTO employee (employee_account, employee_name, employee_gender, employee_age, entry_time, staff, employee_message)
-        VALUES (#{employeeAccount}, #{employeeName}, #{employeeGender}, #{employeeAge}, #{entryTime}, #{staff}, #{employeeMessage})
+        INSERT INTO employee (employee_account, employee_name, employee_gender, employee_age, entry_time, staff, employee_message, employee_password)
+        VALUES (#{employeeAccount}, #{employeeName}, #{employeeGender}, #{employeeAge}, #{entryTime}, #{staff}, #{employeeMessage}, #{employeePassword})
     </insert>
 
     <update id="updateEmployee" parameterType="com.gym.entity.Employee">
@@ -21,7 +21,8 @@
         employee_age = #{employeeAge},
         entry_time = #{entryTime},
         staff = #{staff},
-        employee_message = #{employeeMessage}
+        employee_message = #{employeeMessage},
+        employee_password = #{employeePassword}
         WHERE employee_account = #{employeeAccount}
     </update>
 

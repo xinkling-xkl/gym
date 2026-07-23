@@ -3,7 +3,7 @@
     <header class="header">
       <h1>健身房管理系统</h1>
       <div class="user-info">
-        <span>欢迎, {{ userName }}</span>
+        <span>欢迎, {{ userName }} ({{ role === 'EMPLOYEE' ? '员工' : '会员' }})</span>
         <button class="logout-btn" @click="handleLogout">退出登录</button>
       </div>
     </header>
@@ -15,6 +15,15 @@
           <div class="card-content">
             <h3>我的信息</h3>
             <p>账号: {{ userAccount }}</p>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-icon">🎫</div>
+          <div class="card-content">
+            <h3>剩余课时</h3>
+            <p v-if="role === 'MEMBER'">{{ memberInfo ? memberInfo.cardNextClass ?? 0 : '加载中...' }} 节</p>
+            <p v-else>--</p>
           </div>
         </div>
 
@@ -35,7 +44,7 @@
         </div>
       </div>
 
-      <div class="section">
+      <div class="section" v-if="role === 'MEMBER'">
         <h2>我的课程订单</h2>
         <div v-if="orders.length > 0" class="table-container">
           <table>
@@ -45,6 +54,7 @@
                 <th>课程名称</th>
                 <th>教练</th>
                 <th>开始时间</th>
+                <th>操作</th>
               </tr>
             </thead>
             <tbody>
@@ -53,6 +63,9 @@
                 <td>{{ getClassName(order.classId) }}</td>
                 <td>{{ order.coach }}</td>
                 <td>{{ formatDate(order.classBegin) }}</td>
+                <td>
+                  <button class="cancel-btn" @click="handleCancel(order.classOrderId)">取消预约</button>
+                </td>
               </tr>
             </tbody>
           </table>
@@ -62,7 +75,7 @@
         </div>
       </div>
 
-      <div class="section">
+      <div class="section" v-if="role === 'MEMBER'">
         <h2>全部课程</h2>
         <div class="classes-grid">
           <div v-for="cls in classes" :key="cls.classId" class="class-card">
@@ -70,7 +83,14 @@
             <p>教练: {{ cls.coach }}</p>
             <p>时间: {{ formatDate(cls.classBegin) }}</p>
             <p>时长: {{ cls.classTime }}</p>
-            <button class="order-btn" @click="handleOrder(cls)">预约课程</button>
+            <button
+              class="order-btn"
+              @click="handleOrder(cls)"
+              :disabled="(memberInfo && memberInfo.cardNextClass <= 0)"
+              :class="{ disabled: memberInfo && memberInfo.cardNextClass <= 0 }"
+            >
+              {{ (memberInfo && memberInfo.cardNextClass <= 0) ? '课时不足' : '预约课程' }}
+            </button>
           </div>
         </div>
       </div>
@@ -78,8 +98,8 @@
       <div class="section">
         <h2>器材状态</h2>
         <div class="equipment-grid">
-          <div 
-            v-for="equipment in equipments" 
+          <div
+            v-for="equipment in equipments"
             :key="equipment.equipmentId"
             :class="['equipment-card', equipment.equipmentStatus === '正常' ? 'normal' : 'broken']"
           >
@@ -101,9 +121,11 @@ import axios from 'axios'
 
 const userName = ref(localStorage.getItem('name') || '')
 const userAccount = ref(localStorage.getItem('account') || '')
+const role = ref(localStorage.getItem('role') || '')
 const orders = ref([])
 const classes = ref([])
 const equipments = ref([])
+const memberInfo = ref(null)
 
 const formatDate = (dateStr) => {
   if (!dateStr) return ''
@@ -123,7 +145,20 @@ const handleLogout = () => {
   window.location.href = '/'
 }
 
+const fetchMemberInfo = async () => {
+  if (role.value !== 'MEMBER') return
+  try {
+    const response = await axios.get(`/api/member/${userAccount.value}`)
+    if (response.data.code === 200) {
+      memberInfo.value = response.data.data
+    }
+  } catch (error) {
+    console.error('Fetch member info error:', error)
+  }
+}
+
 const fetchOrders = async () => {
+  if (role.value !== 'MEMBER') return
   try {
     const response = await axios.get(`/api/order/member/${userAccount.value}`)
     if (response.data.code === 200) {
@@ -168,6 +203,7 @@ const handleOrder = async (cls) => {
     if (response.data.code === 200) {
       alert('预约成功')
       fetchOrders()
+      fetchMemberInfo()
     } else {
       alert('预约失败: ' + response.data.message)
     }
@@ -177,11 +213,29 @@ const handleOrder = async (cls) => {
   }
 }
 
+const handleCancel = async (orderId) => {
+  if (!confirm('确定要取消该预约吗？课时将退回。')) return
+  try {
+    const response = await axios.post(`/api/order/cancel/${orderId}`)
+    if (response.data.code === 200) {
+      alert('取消成功，课时已退回')
+      fetchOrders()
+      fetchMemberInfo()
+    } else {
+      alert('取消失败: ' + response.data.message)
+    }
+  } catch (error) {
+    console.error('Cancel error:', error)
+    alert('取消失败')
+  }
+}
+
 const availableEquipment = () => {
   return equipments.value.filter(e => e.equipmentStatus === '正常').length
 }
 
 onMounted(() => {
+  fetchMemberInfo()
   fetchOrders()
   fetchClasses()
   fetchEquipments()
@@ -238,7 +292,7 @@ onMounted(() => {
 
 .dashboard {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 20px;
   margin-bottom: 40px;
 }
@@ -347,8 +401,28 @@ th {
   transition: opacity 0.3s;
 }
 
-.order-btn:hover {
+.order-btn:hover:not(.disabled) {
   opacity: 0.9;
+}
+
+.order-btn.disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+.cancel-btn {
+  padding: 6px 14px;
+  background: #ef4444;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background 0.3s;
+}
+
+.cancel-btn:hover {
+  background: #dc2626;
 }
 
 .equipment-grid {

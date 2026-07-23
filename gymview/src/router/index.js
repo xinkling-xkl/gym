@@ -29,7 +29,7 @@ router.beforeEach((to, from, next) => {
   
   if (to.path === '/') {
     next()
-  } else if (to.path === '/home' && token && role === 'MEMBER') {
+  } else if (to.path === '/home' && token && (role === 'MEMBER' || role === 'EMPLOYEE')) {
     next()
   } else if (to.path === '/admin' && token && role === 'ADMIN') {
     next()

@@ -1,12 +1,12 @@
 package com.gym.controller;
 
+import com.alibaba.csp.sentinel.annotation.SentinelResource;
+import com.alibaba.csp.sentinel.slots.block.BlockException;
+import com.gym.common.Result;
 import com.gym.entity.Admin;
 import com.gym.service.AdminService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.HashMap;
-import java.util.Map;
 
 @RestController
 @RequestMapping("/api/admin")
@@ -17,64 +17,37 @@ public class AdminController {
     private AdminService adminService;
 
     @GetMapping("/{account}")
-    public Map<String, Object> getAdminByAccount(@PathVariable Integer account) {
-        Map<String, Object> result = new HashMap<>();
-        try {
-            Admin admin = adminService.getAdminByAccount(account);
-            if (admin != null) {
-                result.put("code", 200);
-                result.put("data", admin);
-                result.put("message", "查询成功");
-            } else {
-                result.put("code", 404);
-                result.put("message", "管理员不存在");
-            }
-        } catch (Exception e) {
-            result.put("code", 500);
-            result.put("message", "查询失败：" + e.getMessage());
+    @SentinelResource(value = "admin-get", blockHandler = "handleBlock")
+    public Result<Admin> getAdminByAccount(@PathVariable Integer account) {
+        Admin admin = adminService.getAdminByAccount(account);
+        if (admin != null) {
+            return Result.success(admin);
         }
-        return result;
+        return Result.error(404, "管理员不存在");
     }
 
     @PostMapping("/add")
-    public Map<String, Object> addAdmin(@RequestBody Admin admin) {
-        Map<String, Object> result = new HashMap<>();
-        try {
-            adminService.addAdmin(admin);
-            result.put("code", 200);
-            result.put("message", "添加成功");
-        } catch (Exception e) {
-            result.put("code", 500);
-            result.put("message", "添加失败：" + e.getMessage());
-        }
-        return result;
+    @SentinelResource(value = "admin-add", blockHandler = "handleBlock")
+    public Result<Void> addAdmin(@RequestBody Admin admin) {
+        adminService.addAdmin(admin);
+        return Result.success("添加成功", null);
     }
 
     @PutMapping("/update")
-    public Map<String, Object> updateAdmin(@RequestBody Admin admin) {
-        Map<String, Object> result = new HashMap<>();
-        try {
-            adminService.updateAdmin(admin);
-            result.put("code", 200);
-            result.put("message", "更新成功");
-        } catch (Exception e) {
-            result.put("code", 500);
-            result.put("message", "更新失败：" + e.getMessage());
-        }
-        return result;
+    @SentinelResource(value = "admin-update", blockHandler = "handleBlock")
+    public Result<Void> updateAdmin(@RequestBody Admin admin) {
+        adminService.updateAdmin(admin);
+        return Result.success("更新成功", null);
     }
 
     @DeleteMapping("/delete/{account}")
-    public Map<String, Object> deleteAdmin(@PathVariable Integer account) {
-        Map<String, Object> result = new HashMap<>();
-        try {
-            adminService.deleteAdmin(account);
-            result.put("code", 200);
-            result.put("message", "删除成功");
-        } catch (Exception e) {
-            result.put("code", 500);
-            result.put("message", "删除失败：" + e.getMessage());
-        }
-        return result;
+    @SentinelResource(value = "admin-delete", blockHandler = "handleBlock")
+    public Result<Void> deleteAdmin(@PathVariable Integer account) {
+        adminService.deleteAdmin(account);
+        return Result.success("删除成功", null);
+    }
+
+    public Result<Void> handleBlock(BlockException e) {
+        return Result.error(429, "请求过于频繁，请稍后再试");
     }
 }

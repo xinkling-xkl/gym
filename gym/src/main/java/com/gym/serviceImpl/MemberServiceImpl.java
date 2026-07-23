@@ -38,4 +38,14 @@ public class MemberServiceImpl implements MemberService {
     public void deleteMember(Integer memberAccount) {
         memberMapper.deleteMember(memberAccount);
     }
+
+    @Override
+    public boolean deductClass(Integer memberAccount) {
+        return memberMapper.deductClass(memberAccount) > 0;
+    }
+
+    @Override
+    public boolean refundClass(Integer memberAccount) {
+        return memberMapper.refundClass(memberAccount) > 0;
+    }
 }

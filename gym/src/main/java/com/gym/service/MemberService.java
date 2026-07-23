@@ -10,4 +10,6 @@ public interface MemberService {
     void addMember(Member member);
     void updateMember(Member member);
     void deleteMember(Integer memberAccount);
+    boolean deductClass(Integer memberAccount);
+    boolean refundClass(Integer memberAccount);
 }

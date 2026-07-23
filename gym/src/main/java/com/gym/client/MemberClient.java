@@ -5,7 +5,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
 
-@FeignClient(name = "main-server")
+@FeignClient(name = "main-server", contextId = "memberClient")
 public interface MemberClient {
 
     @GetMapping("/api/member/list")

@@ -12,4 +12,6 @@ public interface MemberMapper {
     void addMember(Member member);
     void updateMember(Member member);
     void deleteMember(Integer memberAccount);
+    int deductClass(Integer memberAccount);
+    int refundClass(Integer memberAccount);
 }

@@ -1,13 +1,14 @@
 package com.gym.controller;
 
+import com.alibaba.csp.sentinel.annotation.SentinelResource;
+import com.alibaba.csp.sentinel.slots.block.BlockException;
+import com.gym.common.Result;
 import com.gym.entity.Member;
 import com.gym.service.MemberService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 @RestController
 @RequestMapping("/api/member")
@@ -18,79 +19,44 @@ public class MemberController {
     private MemberService memberService;
 
     @GetMapping("/list")
-    public Map<String, Object> getAllMembers() {
-        Map<String, Object> result = new HashMap<>();
-        try {
-            List<Member> members = memberService.getAllMembers();
-            result.put("code", 200);
-            result.put("data", members);
-            result.put("message", "查询成功");
-        } catch (Exception e) {
-            result.put("code", 500);
-            result.put("message", "查询失败：" + e.getMessage());
-        }
-        return result;
+    @SentinelResource(value = "member-list", blockHandler = "handleBlock")
+    public Result<List<Member>> getAllMembers() {
+        List<Member> members = memberService.getAllMembers();
+        return Result.success(members);
     }
 
     @GetMapping("/{account}")
-    public Map<String, Object> getMemberByAccount(@PathVariable Integer account) {
-        Map<String, Object> result = new HashMap<>();
-        try {
-            Member member = memberService.getMemberByAccount(account);
-            if (member != null) {
-                result.put("code", 200);
-                result.put("data", member);
-                result.put("message", "查询成功");
-            } else {
-                result.put("code", 404);
-                result.put("message", "会员不存在");
-            }
-        } catch (Exception e) {
-            result.put("code", 500);
-            result.put("message", "查询失败：" + e.getMessage());
+    @SentinelResource(value = "member-get", blockHandler = "handleBlock")
+    public Result<Member> getMemberByAccount(@PathVariable Integer account) {
+        Member member = memberService.getMemberByAccount(account);
+        if (member != null) {
+            return Result.success(member);
         }
-        return result;
+        return Result.error(404, "会员不存在");
     }
 
     @PostMapping("/add")
-    public Map<String, Object> addMember(@RequestBody Member member) {
-        Map<String, Object> result = new HashMap<>();
-        try {
-            memberService.addMember(member);
-            result.put("code", 200);
-            result.put("message", "添加成功");
-        } catch (Exception e) {
-            result.put("code", 500);
-            result.put("message", "添加失败：" + e.getMessage());
-        }
-        return result;
+    @SentinelResource(value = "member-add", blockHandler = "handleBlock")
+    public Result<Void> addMember(@RequestBody Member member) {
+        memberService.addMember(member);
+        return Result.success("添加成功", null);
     }
 
     @PutMapping("/update")
-    public Map<String, Object> updateMember(@RequestBody Member member) {
-        Map<String, Object> result = new HashMap<>();
-        try {
-            memberService.updateMember(member);
-            result.put("code", 200);
-            result.put("message", "更新成功");
-        } catch (Exception e) {
-            result.put("code", 500);
-            result.put("message", "更新失败：" + e.getMessage());
-        }
-        return result;
+    @SentinelResource(value = "member-update", blockHandler = "handleBlock")
+    public Result<Void> updateMember(@RequestBody Member member) {
+        memberService.updateMember(member);
+        return Result.success("更新成功", null);
     }
 
     @DeleteMapping("/delete/{account}")
-    public Map<String, Object> deleteMember(@PathVariable Integer account) {
-        Map<String, Object> result = new HashMap<>();
-        try {
-            memberService.deleteMember(account);
-            result.put("code", 200);
-            result.put("message", "删除成功");
-        } catch (Exception e) {
-            result.put("code", 500);
-            result.put("message", "删除失败：" + e.getMessage());
-        }
-        return result;
+    @SentinelResource(value = "member-delete", blockHandler = "handleBlock")
+    public Result<Void> deleteMember(@PathVariable Integer account) {
+        memberService.deleteMember(account);
+        return Result.success("删除成功", null);
+    }
+
+    public Result<Void> handleBlock(BlockException e) {
+        return Result.error(429, "请求过于频繁，请稍后再试");
     }
 }
