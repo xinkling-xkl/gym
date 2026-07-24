@@ -346,19 +346,28 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import axios from 'axios'
+import { useRouter } from 'vue-router'
 
+const router = useRouter()
 const userName = ref(localStorage.getItem('name') || '')
 const activeMenu = ref('member')
 
 const menus = [
+  { key: 'dashboard', label: '📊 数据大屏' },
   { key: 'member', label: '会员管理' },
   { key: 'employee', label: '员工管理' },
   { key: 'equipment', label: '器材管理' },
   { key: 'class', label: '课程管理' },
   { key: 'order', label: '订单管理' }
 ]
+
+watch(activeMenu, (val) => {
+  if (val === 'dashboard') {
+    router.push('/dashboard')
+  }
+})
 
 const members = ref([])
 const employees = ref([])

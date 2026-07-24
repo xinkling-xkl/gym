@@ -1,0 +1,31 @@
+# ===== 敏感配置 =====
+.env
+*.env
+application-local.yml
+application-local.properties
+
+# ===== IDE =====
+.idea/
+*.iml
+
+# ===== Python =====
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# ===== Java =====
+target/
+*.class
+
+# ===== 文件上传目录 =====
+picture/
+**/picture/
+
+# ===== Node =====
+node_modules/
+dist/
+
+# ===== 系统文件 =====
+.DS_Store
+Thumbs.db

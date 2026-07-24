@@ -1,30 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="CompilerConfiguration">
-    <annotationProcessing>
-      <profile name="Maven default annotation processors profile" enabled="true">
-        <sourceOutputDir name="target/generated-sources/annotations" />
-        <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
-        <outputRelativeToContentRoot value="true" />
-        <module name="gateway-server" />
-        <module name="main-server" />
-        <module name="login-server" />
-      </profile>
-    </annotationProcessing>
     <bytecodeTargetLevel>
-      <module name="gateway" target="17" />
-      <module name="springboot" target="17" />
-      <module name="test2" target="17" />
+      <module name="file-service" target="17" />
+      <module name="gateway-server" target="17" />
+      <module name="login-server" target="17" />
+      <module name="main-server" target="17" />
     </bytecodeTargetLevel>
-  </component>
-  <component name="JavacSettings">
-    <option name="ADDITIONAL_OPTIONS_OVERRIDE">
-      <module name="gateway" options="-parameters" />
-      <module name="gateway-server" options="-parameters" />
-      <module name="login-server" options="-parameters" />
-      <module name="main-server" options="-parameters" />
-      <module name="springboot" options="-parameters" />
-      <module name="test2" options="-parameters" />
-    </option>
   </component>
 </project>

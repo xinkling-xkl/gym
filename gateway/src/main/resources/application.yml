@@ -45,6 +45,26 @@ spring:
           uri: lb://main-server
           predicates:
             - Path=/api/order/**
+        # 文件服务
+        - id: file-server
+          uri: lb://file-server
+          predicates:
+            - Path=/api/file/**,/pictures/**
+        # 签到服务 (gym)
+        - id: main-server-checkin
+          uri: lb://main-server
+          predicates:
+            - Path=/api/checkin/**
+        # 统计服务 (gym)
+        - id: main-server-statistics
+          uri: lb://main-server
+          predicates:
+            - Path=/api/statistics/**
+        # AI 对话服务
+        - id: ai-chat-server
+          uri: lb://ai-chat-server
+          predicates:
+            - Path=/api/ai/**
       # 跨域配置
       globalcors:
         cors-configurations:

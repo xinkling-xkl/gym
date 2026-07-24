@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.gym.mapper.CheckInMapper">
+    <select id="getAllCheckIns" resultType="com.gym.entity.CheckIn">
+        SELECT * FROM check_in ORDER BY check_in_time DESC
+    </select>
+
+    <select id="getCheckInsByMemberAccount" resultType="com.gym.entity.CheckIn">
+        SELECT * FROM check_in WHERE member_account = #{memberAccount} ORDER BY check_in_time DESC
+    </select>
+
+    <select id="getTodayCheckIn" resultType="com.gym.entity.CheckIn">
+        SELECT * FROM check_in WHERE member_account = #{memberAccount}
+        AND DATE(check_in_time) = CURDATE() LIMIT 1
+    </select>
+
+    <insert id="addCheckIn" parameterType="com.gym.entity.CheckIn">
+        INSERT INTO check_in (member_account, member_name, class_order_id, check_in_time, check_in_type, remark)
+        VALUES (#{memberAccount}, #{memberName}, #{classOrderId}, NOW(), #{checkInType}, #{remark})
+    </insert>
+</mapper>

@@ -15,6 +15,11 @@ const routes = [
     path: '/admin',
     name: 'Admin',
     component: () => import('../views/Admin.vue')
+  },
+  {
+    path: '/dashboard',
+    name: 'Dashboard',
+    component: () => import('../views/Dashboard.vue')
   }
 ]
 
@@ -31,7 +36,7 @@ router.beforeEach((to, from, next) => {
     next()
   } else if (to.path === '/home' && token && (role === 'MEMBER' || role === 'EMPLOYEE')) {
     next()
-  } else if (to.path === '/admin' && token && role === 'ADMIN') {
+  } else if ((to.path === '/admin' || to.path === '/dashboard') && token && role === 'ADMIN') {
     next()
   } else {
     next('/')

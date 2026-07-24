@@ -1,0 +1,27 @@
+server:
+  port: 8087
+
+spring:
+  application:
+    name: file-server
+  config:
+    import: "nacos:common.yaml?group=DEFAULT_GROUP"
+  cloud:
+    nacos:
+      discovery:
+        server-addr: 192.168.80.1:8848
+      config:
+        server-addr: 192.168.80.1:8848
+    sentinel:
+      transport:
+        dashboard: localhost:8858
+        port: 8722
+      eager: true
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
+
+# 文件上传配置
+file:
+  upload-path: ./picture

@@ -51,6 +51,31 @@ export default defineConfig({
         changeOrigin: true,
         ws: true,
       },
+      '/api/file': {
+        target: 'http://localhost:8087',
+        changeOrigin: true,
+        ws: true,
+      },
+      '/pictures': {
+        target: 'http://localhost:8087',
+        changeOrigin: true,
+        ws: true,
+      },
+      '/api/checkin': {
+        target: 'http://localhost:8084',
+        changeOrigin: true,
+        ws: true,
+      },
+      '/api/statistics': {
+        target: 'http://localhost:8084',
+        changeOrigin: true,
+        ws: true,
+      },
+      '/api/ai': {
+        target: 'http://localhost:8090',
+        changeOrigin: true,
+        ws: true,
+      },
     },
   },
 })

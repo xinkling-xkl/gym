@@ -44,6 +44,24 @@
         </div>
       </div>
 
+      <!-- 签到打卡区域 -->
+      <div class="section checkin-section">
+        <h2>🏃 签到打卡</h2>
+        <div v-if="todayCheckIn" class="checkin-done">
+          <span class="checkin-icon">✅</span>
+          <div>
+            <p class="checkin-time">今日已签到 - {{ formatDate(todayCheckIn.checkInTime) }}</p>
+            <p class="checkin-type">{{ todayCheckIn.checkInType === 'CLASS' ? '上课签到' : '自主训练签到' }}</p>
+          </div>
+        </div>
+        <div v-else class="checkin-actions">
+          <button class="checkin-btn" @click="handleCheckIn('GYM')">
+            💪 自主训练签到
+          </button>
+          <span class="checkin-hint">今日尚未签到，点击上方按钮完成签到</span>
+        </div>
+      </div>
+
       <div class="section" v-if="role === 'MEMBER'">
         <h2>我的课程订单</h2>
         <div v-if="orders.length > 0" class="table-container">
@@ -126,6 +144,7 @@ const orders = ref([])
 const classes = ref([])
 const equipments = ref([])
 const memberInfo = ref(null)
+const todayCheckIn = ref(null)
 
 const formatDate = (dateStr) => {
   if (!dateStr) return ''
@@ -154,6 +173,17 @@ const fetchMemberInfo = async () => {
     }
   } catch (error) {
     console.error('Fetch member info error:', error)
+  }
+}
+
+const fetchTodayCheckIn = async () => {
+  try {
+    const response = await axios.get(`/api/checkin/today/${userAccount.value}`)
+    if (response.data.code === 200) {
+      todayCheckIn.value = response.data.data
+    }
+  } catch (error) {
+    console.error('Fetch checkin error:', error)
   }
 }
 
@@ -188,6 +218,25 @@ const fetchEquipments = async () => {
     }
   } catch (error) {
     console.error('Fetch equipments error:', error)
+  }
+}
+
+const handleCheckIn = async (type) => {
+  try {
+    const response = await axios.post('/api/checkin', {
+      memberAccount: Number(userAccount.value),
+      memberName: userName.value,
+      checkInType: type
+    })
+    if (response.data.code === 200) {
+      alert('签到成功！')
+      fetchTodayCheckIn()
+    } else {
+      alert(response.data.message)
+    }
+  } catch (error) {
+    console.error('Checkin error:', error)
+    alert('签到失败')
   }
 }
 
@@ -239,6 +288,7 @@ onMounted(() => {
   fetchOrders()
   fetchClasses()
   fetchEquipments()
+  fetchTodayCheckIn()
 })
 </script>
 
@@ -333,6 +383,61 @@ onMounted(() => {
   margin: 0 0 20px 0;
   color: #333;
   font-size: 20px;
+}
+
+.checkin-section {
+  background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%);
+  border: 2px solid #22c55e;
+}
+
+.checkin-done {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 10px 0;
+}
+
+.checkin-icon {
+  font-size: 48px;
+}
+
+.checkin-time {
+  font-size: 18px;
+  font-weight: 600;
+  color: #16a34a;
+  margin: 0;
+}
+
+.checkin-type {
+  color: #666;
+  margin: 4px 0 0 0;
+}
+
+.checkin-actions {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.checkin-btn {
+  padding: 14px 32px;
+  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+  color: white;
+  border: none;
+  border-radius: 10px;
+  font-size: 16px;
+  cursor: pointer;
+  transition: opacity 0.3s, transform 0.2s;
+}
+
+.checkin-btn:hover {
+  opacity: 0.9;
+  transform: scale(1.03);
+}
+
+.checkin-hint {
+  color: #888;
+  font-size: 14px;
 }
 
 .table-container {
