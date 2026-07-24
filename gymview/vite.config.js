@@ -76,6 +76,16 @@ export default defineConfig({
         changeOrigin: true,
         ws: true,
       },
+      '/api/notification': {
+        target: 'http://localhost:8088',
+        changeOrigin: true,
+        ws: true,
+      },
+      '/ws': {
+        target: 'http://localhost:8088',
+        changeOrigin: true,
+        ws: true,
+      },
     },
   },
 })

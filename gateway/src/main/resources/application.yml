@@ -65,6 +65,11 @@ spring:
           uri: lb://ai-chat-server
           predicates:
             - Path=/api/ai/**
+        # 通知服务
+        - id: notification-server
+          uri: lb://notification-server
+          predicates:
+            - Path=/api/notification/**,/ws/**
       # 跨域配置
       globalcors:
         cors-configurations:

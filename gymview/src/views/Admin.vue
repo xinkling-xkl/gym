@@ -3,6 +3,7 @@
     <header class="header">
       <h1>健身房管理系统 - 管理员后台</h1>
       <div class="user-info">
+        <NotificationBell />
         <span>欢迎, {{ userName }}</span>
         <button class="logout-btn" @click="handleLogout">退出登录</button>
       </div>
@@ -191,6 +192,10 @@
           </div>
         </div>
       </main>
+
+      <aside class="ai-sidebar">
+        <AiChat />
+      </aside>
     </div>
 
     <div v-if="showMemberForm" class="modal">
@@ -349,6 +354,8 @@
 import { ref, onMounted, watch } from 'vue'
 import axios from 'axios'
 import { useRouter } from 'vue-router'
+import NotificationBell from '../components/NotificationBell.vue'
+import AiChat from '../components/AiChat.vue'
 
 const router = useRouter()
 const userName = ref(localStorage.getItem('name') || '')
@@ -769,6 +776,12 @@ onMounted(() => {
 .content {
   flex: 1;
   padding: 30px;
+}
+
+.ai-sidebar {
+  width: 320px;
+  padding: 30px 20px;
+  background: #f1f5f9;
 }
 
 .section-header {

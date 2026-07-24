@@ -3,13 +3,15 @@
     <header class="header">
       <h1>健身房管理系统</h1>
       <div class="user-info">
+        <NotificationBell />
         <span>欢迎, {{ userName }} ({{ role === 'EMPLOYEE' ? '员工' : '会员' }})</span>
         <button class="logout-btn" @click="handleLogout">退出登录</button>
       </div>
     </header>
 
-    <main class="main-content">
-      <div class="dashboard">
+    <div class="home-body">
+      <main class="main-content">
+        <div class="dashboard">
         <div class="card">
           <div class="card-icon">👤</div>
           <div class="card-content">
@@ -130,12 +132,19 @@
         </div>
       </div>
     </main>
+
+    <aside class="ai-sidebar">
+      <AiChat />
+    </aside>
+    </div>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
 import axios from 'axios'
+import NotificationBell from '../components/NotificationBell.vue'
+import AiChat from '../components/AiChat.vue'
 
 const userName = ref(localStorage.getItem('name') || '')
 const userAccount = ref(localStorage.getItem('account') || '')
@@ -296,6 +305,13 @@ onMounted(() => {
 .home-container {
   min-height: 100vh;
   background: #f5f7fa;
+  display: flex;
+  flex-direction: column;
+}
+
+.home-body {
+  display: flex;
+  flex: 1;
 }
 
 .header {
@@ -337,7 +353,14 @@ onMounted(() => {
 }
 
 .main-content {
+  flex: 1;
   padding: 40px;
+}
+
+.ai-sidebar {
+  width: 320px;
+  padding: 30px 20px;
+  background: #f1f5f9;
 }
 
 .dashboard {
