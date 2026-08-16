@@ -1,7 +1,10 @@
 package com.gym.entity;
 
+import lombok.Data;
+
 import java.util.Date;
 
+@Data
 public class Employee {
     private Integer employeeAccount;
     private String employeeName;
@@ -11,68 +14,4 @@ public class Employee {
     private String staff;
     private String employeeMessage;
     private String employeePassword;
-
-    public Integer getEmployeeAccount() {
-        return employeeAccount;
-    }
-
-    public void setEmployeeAccount(Integer employeeAccount) {
-        this.employeeAccount = employeeAccount;
-    }
-
-    public String getEmployeeName() {
-        return employeeName;
-    }
-
-    public void setEmployeeName(String employeeName) {
-        this.employeeName = employeeName;
-    }
-
-    public String getEmployeeGender() {
-        return employeeGender;
-    }
-
-    public void setEmployeeGender(String employeeGender) {
-        this.employeeGender = employeeGender;
-    }
-
-    public Integer getEmployeeAge() {
-        return employeeAge;
-    }
-
-    public void setEmployeeAge(Integer employeeAge) {
-        this.employeeAge = employeeAge;
-    }
-
-    public Date getEntryTime() {
-        return entryTime;
-    }
-
-    public void setEntryTime(Date entryTime) {
-        this.entryTime = entryTime;
-    }
-
-    public String getStaff() {
-        return staff;
-    }
-
-    public void setStaff(String staff) {
-        this.staff = staff;
-    }
-
-    public String getEmployeeMessage() {
-        return employeeMessage;
-    }
-
-    public void setEmployeeMessage(String employeeMessage) {
-        this.employeeMessage = employeeMessage;
-    }
-
-    public String getEmployeePassword() {
-        return employeePassword;
-    }
-
-    public void setEmployeePassword(String employeePassword) {
-        this.employeePassword = employeePassword;
-    }
 }

@@ -48,7 +48,7 @@ public class FileUtils {
             folderFile.mkdirs();
         }
 
-        File targetFile = new File(folderFile, newFilename);
+        File targetFile = new File(folderFile, newFilename).getAbsoluteFile();
         file.transferTo(targetFile);
 
         return "/" + folder + "/" + newFilename;

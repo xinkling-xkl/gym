@@ -7,7 +7,7 @@
 
     <div v-show="isOpen" class="notification-dropdown">
       <div class="dropdown-header">
-        <h3>通知中心</h3>
+        <h3 class="center-link" @click="goToCenter">通知中心 ›</h3>
         <button class="mark-all-read" @click="markAllAsRead" v-if="unreadCount > 0">
           全部已读
         </button>
@@ -42,18 +42,22 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue';
+import { useRouter } from 'vue-router';
 import axios from 'axios';
-import SockJS from 'sockjs-client';
-import Stomp from 'stompjs';
+const router = useRouter();
 const isOpen = ref(false);
 const notifications = ref([]);
 const unreadCount = ref(0);
-const userAccount = ref(localStorage.getItem('account') || '');
+const userAccount = ref(sessionStorage.getItem('account') || '');
 const toggleDropdown = () => {
  isOpen.value = !isOpen.value;
  if (isOpen.value) {
  fetchNotifications();
  }
+};
+const goToCenter = () => {
+ isOpen.value = false;
+ router.push('/notifications');
 };
 const getNotificationIcon = (type) => {
  const icons = {
@@ -99,16 +103,17 @@ const fetchNotifications = async () => {
  }
 };
 const handleNotificationClick = async (notification) => {
- if (!notification.read) {
- try {
- await axios.post(`/api/notification/read/${notification.id}`);
- notification.read = true;
- unreadCount.value--;
- }
- catch (error) {
- console.error('Mark read error:', error);
- }
- }
+  if (!notification.read) {
+    try {
+      await axios.post(`/api/notification/read/${notification.id}`);
+      notification.read = true;
+      unreadCount.value--;
+    }
+    catch (error) {
+      console.error('Mark read error:', error);
+    }
+  }
+  router.push(`/notifications/${notification.id}`);
 };
 const markAllAsRead = async () => {
  if (!userAccount.value)
@@ -123,35 +128,37 @@ const markAllAsRead = async () => {
  }
 };
 let stompClient = null;
-const connectWebSocket = () => {
+const connectWebSocket = async () => {
   if (!userAccount.value) return;
   try {
+    const [SockJSModule, StompModule] = await Promise.all([
+      import('sockjs-client'),
+      import('stompjs')
+    ]);
+    const SockJS = SockJSModule.default || SockJSModule;
+    const Stomp = StompModule.default || StompModule;
+
     const socket = new SockJS('/ws');
- stompClient = Stomp.over(socket);
- stompClient.connect({}, () => {
- stompClient.subscribe(`/topic/notification/${userAccount.value}`, (message) => {
- const notification = JSON.parse(message.body);
- notifications.value.unshift(notification);
- if (!notification.read) {
- unreadCount.value++;
- }
- // 限制最多显示20条
- if (notifications.value.length > 20) {
- notifications.value.pop();
- }
- });
- });
- }
- catch (error) {
- console.error('WebSocket connect error:', error);
- }
+    stompClient = Stomp.over(socket);
+    stompClient.connect({}, () => {
+      stompClient.subscribe(`/topic/notification/${userAccount.value}`, (message) => {
+        const notification = JSON.parse(message.body);
+        notifications.value.unshift(notification);
+        if (!notification.read) {
+          unreadCount.value++;
+        }
+        if (notifications.value.length > 20) {
+          notifications.value.pop();
+        }
+      });
+    });
+  } catch (error) {
+    console.warn('WebSocket 连接失败，使用轮询模式:', error.message);
+  }
 };
 onMounted(() => {
- fetchNotifications();
- // 尝试连接WebSocket
- if (window.SockJS && window.Stomp) {
- connectWebSocket();
- }
+  fetchNotifications();
+  connectWebSocket();
 });
 onUnmounted(() => {
  if (stompClient) {
@@ -210,6 +217,16 @@ onUnmounted(() => {
   margin: 0;
   font-size: 16px;
   color: #333;
+}
+
+.dropdown-header h3.center-link {
+  cursor: pointer;
+  color: #0ea5e9;
+  transition: color 0.2s;
+}
+
+.dropdown-header h3.center-link:hover {
+  color: #0284c7;
 }
 
 .mark-all-read {

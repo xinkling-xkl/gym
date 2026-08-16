@@ -63,7 +63,7 @@ const inputMessage = ref('')
 const isLoading = ref(false)
 const messagesContainer = ref(null)
 
-const userId = ref(localStorage.getItem('account') || 1)
+const userId = ref(sessionStorage.getItem('account') || 1)
 
 const toggleExpand = () => {
   isExpanded.value = !isExpanded.value
@@ -95,11 +95,13 @@ const sendMessage = async () => {
     if (response.data.code === 200) {
       messages.value.push({ role: 'assistant', content: response.data.data.reply })
     } else {
-      messages.value.push({ role: 'assistant', content: '抱歉，我暂时无法回答这个问题。' })
+      // 显示后端返回的具体错误原因，方便排查
+      messages.value.push({ role: 'assistant', content: response.data.message || '抱歉，服务暂时不可用。' })
     }
   } catch (error) {
     console.error('AI chat error:', error)
-    messages.value.push({ role: 'assistant', content: 'AI服务暂时不可用，请稍后再试。' })
+    const reason = error.response?.data?.message || error.message || '网络异常'
+    messages.value.push({ role: 'assistant', content: `AI服务异常：${reason}` })
   } finally {
     isLoading.value = false
     await scrollToBottom()

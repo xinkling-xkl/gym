@@ -9,9 +9,9 @@ spring:
   cloud:
     nacos:
       discovery:
-        server-addr: 192.168.80.1:8848
+        server-addr: localhost:8848
       config:
-        server-addr: 192.168.80.1:8848
+        server-addr: localhost:8848
     gateway:
       # 服务发现路由配置：通过服务名转发
       routes:
@@ -70,6 +70,11 @@ spring:
           uri: lb://notification-server
           predicates:
             - Path=/api/notification/**,/ws/**
+        # 健身计划服务
+        - id: plan-server
+          uri: lb://plan-server
+          predicates:
+            - Path=/api/plan/**
       # 跨域配置
       globalcors:
         cors-configurations:
@@ -81,6 +86,4 @@ spring:
 
     sentinel:
       transport:
-        dashboard: localhost:8858
         port: 8719
-      eager: true

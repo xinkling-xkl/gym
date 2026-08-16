@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.example.plan.mapper.FitnessPlanMapper">
+
+    <resultMap id="PlanMap" type="org.example.plan.entity.FitnessPlan">
+        <id property="planId" column="plan_id"/>
+        <result property="memberAccount" column="member_account"/>
+        <result property="planName" column="plan_name"/>
+        <result property="goal" column="goal"/>
+        <result property="startDate" column="start_date"/>
+        <result property="endDate" column="end_date"/>
+        <result property="status" column="status"/>
+        <result property="createTime" column="create_time"/>
+        <!-- 训练项明细集合：通过 PlanItemMapper 的 getItemsByPlanId 查询
+             使用 eager 立即加载，避免 Javassist 延迟加载代理与 Jackson 序列化冲突 -->
+        <collection property="items" column="plan_id"
+                    select="org.example.plan.mapper.PlanItemMapper.getItemsByPlanId"
+                    fetchType="eager"/>
+    </resultMap>
+
+    <select id="getPlansByMember" resultMap="PlanMap">
+        SELECT * FROM fitness_plan
+        WHERE member_account = #{memberAccount}
+        ORDER BY create_time DESC
+    </select>
+
+    <select id="getPlanById" resultMap="PlanMap">
+        SELECT * FROM fitness_plan WHERE plan_id = #{planId}
+    </select>
+
+    <insert id="addPlan" parameterType="org.example.plan.entity.FitnessPlan" useGeneratedKeys="true" keyProperty="planId">
+        INSERT INTO fitness_plan (member_account, plan_name, goal, start_date, end_date, status)
+        VALUES (#{memberAccount}, #{planName}, #{goal}, #{startDate}, #{endDate},
+                <choose>
+                    <when test="status != null">#{status}</when>
+                    <otherwise>'ACTIVE'</otherwise>
+                </choose>)
+    </insert>
+
+    <update id="updatePlan" parameterType="org.example.plan.entity.FitnessPlan">
+        UPDATE fitness_plan SET
+            plan_name  = #{planName},
+            goal       = #{goal},
+            start_date = #{startDate},
+            end_date   = #{endDate},
+            status     = #{status}
+        WHERE plan_id = #{planId}
+    </update>
+
+    <update id="updateStatus">
+        UPDATE fitness_plan SET status = #{status} WHERE plan_id = #{planId}
+    </update>
+
+    <delete id="deletePlan">
+        DELETE FROM fitness_plan WHERE plan_id = #{planId}
+    </delete>
+</mapper>

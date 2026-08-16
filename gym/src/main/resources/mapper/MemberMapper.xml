@@ -10,8 +10,8 @@
     </select>
 
     <insert id="addMember" parameterType="com.gym.entity.Member">
-        INSERT INTO member (member_account, member_password, member_name, member_gender, member_age, member_height, member_weight, member_phone, card_time, card_class, card_next_class)
-        VALUES (#{memberAccount}, #{memberPassword}, #{memberName}, #{memberGender}, #{memberAge}, #{memberHeight}, #{memberWeight}, #{memberPhone}, #{cardTime}, #{cardClass}, #{cardNextClass})
+        INSERT INTO member (member_account, member_password, member_name, member_gender, member_age, member_height, member_weight, member_phone, card_time, card_class, card_next_class, card_expire_date, avatar)
+        VALUES (#{memberAccount}, #{memberPassword}, #{memberName}, #{memberGender}, #{memberAge}, #{memberHeight}, #{memberWeight}, #{memberPhone}, #{cardTime}, #{cardClass}, #{cardNextClass}, #{cardExpireDate}, #{avatar})
     </insert>
 
     <update id="updateMember" parameterType="com.gym.entity.Member">
@@ -25,6 +25,31 @@
         member_phone = #{memberPhone},
         card_time = #{cardTime},
         card_class = #{cardClass},
+        card_next_class = #{cardNextClass},
+        card_expire_date = #{cardExpireDate},
+        avatar = #{avatar}
+        WHERE member_account = #{memberAccount}
+    </update>
+
+    <!-- 会员自助修改个人资料（仅个人字段，不动卡信息） -->
+    <update id="updateProfile" parameterType="com.gym.entity.Member">
+        UPDATE member SET
+        member_name = #{memberName},
+        member_gender = #{memberGender},
+        member_age = #{memberAge},
+        member_height = #{memberHeight},
+        member_weight = #{memberWeight},
+        member_phone = #{memberPhone},
+        avatar = #{avatar}
+        WHERE member_account = #{memberAccount}
+    </update>
+
+    <!-- 前台续费：更新卡类型、办卡时间、过期时间、剩余天数 -->
+    <update id="renewMember" parameterType="com.gym.entity.Member">
+        UPDATE member SET
+        card_class = #{cardClass},
+        card_time = #{cardTime},
+        card_expire_date = #{cardExpireDate},
         card_next_class = #{cardNextClass}
         WHERE member_account = #{memberAccount}
     </update>
@@ -42,4 +67,16 @@
         UPDATE member SET card_next_class = card_next_class + 1
         WHERE member_account = #{memberAccount}
     </update>
+
+    <update id="updatePassword">
+        UPDATE member SET member_password = #{password}
+        WHERE member_account = #{memberAccount}
+    </update>
+
+    <!-- 查询已过期但未续费的会员（card_expire_date 早于传入日期，支持 mock.time） -->
+    <select id="getExpiredMembers" resultType="com.gym.entity.Member">
+        SELECT * FROM member
+        WHERE card_expire_date IS NOT NULL
+          AND card_expire_date &lt; #{today}
+    </select>
 </mapper>

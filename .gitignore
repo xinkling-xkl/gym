@@ -1,6 +1,8 @@
 # ===== 敏感配置 =====
 .env
+.env.*
 *.env
+!.env.docker.example
 application-local.yml
 application-local.properties
 

@@ -5,13 +5,27 @@
         SELECT * FROM class_table
     </select>
 
+    <!-- 可预约课程：开课时间晚于当前时间（已开课的自动下架），带出已约人数 -->
+    <select id="getAvailableClasses" resultType="com.gym.entity.ClassTable">
+        SELECT c.*,
+               (SELECT COUNT(*) FROM class_order o
+                WHERE o.class_id = c.class_id AND o.status = 'BOOKED') AS booked_count
+        FROM class_table c
+        WHERE c.class_begin IS NULL OR c.class_begin &gt;= #{now}
+        ORDER BY c.class_begin ASC
+    </select>
+
     <select id="getClassById" resultType="com.gym.entity.ClassTable">
         SELECT * FROM class_table WHERE class_id = #{classId}
     </select>
 
+    <select id="getClassesByCoach" resultType="com.gym.entity.ClassTable">
+        SELECT * FROM class_table WHERE coach = #{coach} ORDER BY class_begin DESC
+    </select>
+
     <insert id="addClass" parameterType="com.gym.entity.ClassTable">
-        INSERT INTO class_table (class_name, class_begin, class_time, coach)
-        VALUES (#{className}, #{classBegin}, #{classTime}, #{coach})
+        INSERT INTO class_table (class_name, class_begin, class_time, coach, max_capacity)
+        VALUES (#{className}, #{classBegin}, #{classTime}, #{coach}, #{maxCapacity})
     </insert>
 
     <update id="updateClass" parameterType="com.gym.entity.ClassTable">
@@ -19,7 +33,8 @@
         class_name = #{className},
         class_begin = #{classBegin},
         class_time = #{classTime},
-        coach = #{coach}
+        coach = #{coach},
+        max_capacity = #{maxCapacity}
         WHERE class_id = #{classId}
     </update>
 

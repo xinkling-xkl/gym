@@ -1,51 +1,17 @@
 package com.gym.entity;
 
-import java.util.Date;
+import lombok.Data;
 
+import java.time.LocalDateTime;
+
+@Data
 public class ClassTable {
     private Integer classId;
     private String className;
-    private Date classBegin;
+    private LocalDateTime classBegin;
     private String classTime;
     private String coach;
-
-    public Integer getClassId() {
-        return classId;
-    }
-
-    public void setClassId(Integer classId) {
-        this.classId = classId;
-    }
-
-    public String getClassName() {
-        return className;
-    }
-
-    public void setClassName(String className) {
-        this.className = className;
-    }
-
-    public Date getClassBegin() {
-        return classBegin;
-    }
-
-    public void setClassBegin(Date classBegin) {
-        this.classBegin = classBegin;
-    }
-
-    public String getClassTime() {
-        return classTime;
-    }
-
-    public void setClassTime(String classTime) {
-        this.classTime = classTime;
-    }
-
-    public String getCoach() {
-        return coach;
-    }
-
-    public void setCoach(String coach) {
-        this.coach = coach;
-    }
+    private Integer maxCapacity;
+    /** 已预约人数（非持久化字段，仅用于前端展示） */
+    private Integer bookedCount;
 }

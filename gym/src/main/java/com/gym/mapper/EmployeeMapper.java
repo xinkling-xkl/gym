@@ -9,6 +9,7 @@ import java.util.List;
 public interface EmployeeMapper {
     List<Employee> getAllEmployees();
     Employee getEmployeeByAccount(Integer employeeAccount);
+    Employee getEmployeeByName(String employeeName);
     void addEmployee(Employee employee);
     void updateEmployee(Employee employee);
     void deleteEmployee(Integer employeeAccount);

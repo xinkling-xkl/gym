@@ -25,6 +25,15 @@ public class ClassTableController {
         return Result.success(classes);
     }
 
+    /**
+     * 可预约课程列表（已开课的自动下架，不返回）
+     */
+    @GetMapping("/available")
+    @SentinelResource(value = "class-available", blockHandler = "handleBlock")
+    public Result<List<ClassTable>> getAvailableClasses() {
+        return Result.success(classTableService.getAvailableClasses());
+    }
+
     @GetMapping("/{id}")
     @SentinelResource(value = "class-get", blockHandler = "handleBlock")
     public Result<ClassTable> getClassById(@PathVariable Integer id) {
@@ -33,6 +42,12 @@ public class ClassTableController {
             return Result.success(classTable);
         }
         return Result.error(404, "课程不存在");
+    }
+
+    @GetMapping("/coach/{coachName}")
+    @SentinelResource(value = "class-coach", blockHandler = "handleBlock")
+    public Result<List<ClassTable>> getClassesByCoach(@PathVariable String coachName) {
+        return Result.success(classTableService.getClassesByCoach(coachName));
     }
 
     @PostMapping("/add")

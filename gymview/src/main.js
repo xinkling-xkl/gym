@@ -7,7 +7,7 @@ import router from './router/index.js'
 
 // Axios 拦截器：自动携带 JWT Token
 axios.interceptors.request.use(config => {
-  const token = localStorage.getItem('token')
+  const token = sessionStorage.getItem('token')
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
   }
@@ -21,8 +21,10 @@ axios.interceptors.response.use(response => {
   return response
 }, error => {
   if (error.response && error.response.status === 401) {
-    localStorage.clear()
-    router.push('/')
+    sessionStorage.clear()
+    if (window.location.pathname !== '/') {
+      router.push('/')
+    }
   }
   return Promise.reject(error)
 })

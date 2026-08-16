@@ -5,6 +5,10 @@
         SELECT * FROM admin WHERE admin_account = #{adminAccount}
     </select>
 
+    <select id="getAllAdmins" resultType="com.gym.entity.Admin">
+        SELECT * FROM admin
+    </select>
+
     <insert id="addAdmin" parameterType="com.gym.entity.Admin">
         INSERT INTO admin (admin_account, admin_password)
         VALUES (#{adminAccount}, #{adminPassword})

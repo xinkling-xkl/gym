@@ -1,34 +1,98 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.gym.mapper.ClassOrderMapper">
-    <select id="getAllOrders" resultType="com.gym.entity.ClassOrder">
-        SELECT * FROM class_order
+
+    <resultMap id="ClassOrderMap" type="com.gym.entity.ClassOrder">
+        <id property="classOrderId" column="class_order_id"/>
+        <result property="classId" column="class_id"/>
+        <result property="className" column="class_name"/>
+        <result property="coach" column="coach"/>
+        <result property="memberName" column="member_name"/>
+        <result property="memberAccount" column="member_account"/>
+        <result property="classBegin" column="class_begin"/>
+        <result property="status" column="status"/>
+        <result property="createTime" column="create_time"/>
+    </resultMap>
+
+    <select id="getAllOrders" resultMap="ClassOrderMap">
+        SELECT * FROM class_order ORDER BY create_time DESC
     </select>
 
-    <select id="getOrderById" resultType="com.gym.entity.ClassOrder">
+    <select id="getOrderById" resultMap="ClassOrderMap">
         SELECT * FROM class_order WHERE class_order_id = #{classOrderId}
     </select>
 
-    <select id="getOrdersByMemberAccount" resultType="com.gym.entity.ClassOrder">
-        SELECT * FROM class_order WHERE member_account = #{memberAccount}
+    <select id="getOrdersByMemberAccount" resultMap="ClassOrderMap">
+        SELECT * FROM class_order
+        WHERE member_account = #{memberAccount}
+        ORDER BY create_time DESC
+    </select>
+
+    <select id="getOrdersByMemberAccountAndStatus" resultMap="ClassOrderMap">
+        SELECT * FROM class_order
+        WHERE member_account = #{memberAccount}
+          AND status = #{status}
+        ORDER BY create_time DESC
+    </select>
+
+    <select id="getOrdersByCoach" resultMap="ClassOrderMap">
+        SELECT * FROM class_order
+        WHERE coach = #{coach}
+        ORDER BY create_time DESC
+    </select>
+
+    <select id="countBookedByClassId" resultType="int">
+        SELECT COUNT(*) FROM class_order
+        WHERE class_id = #{classId} AND status = 'BOOKED'
+    </select>
+
+    <select id="countProcessedByClassId" resultType="int">
+        SELECT COUNT(*) FROM class_order
+        WHERE class_id = #{classId} AND status IN ('COMPLETED', 'NO_SHOW')
     </select>
 
     <insert id="addOrder" parameterType="com.gym.entity.ClassOrder">
-        INSERT INTO class_order (class_id, coach, member_name, member_account, class_begin)
-        VALUES (#{classId}, #{coach}, #{memberName}, #{memberAccount}, #{classBegin})
+        INSERT INTO class_order (class_id, class_name, coach, member_name, member_account, class_begin, status, create_time)
+        VALUES (#{classId}, #{className}, #{coach}, #{memberName}, #{memberAccount}, #{classBegin}, 'BOOKED', NOW())
     </insert>
 
     <update id="updateOrder" parameterType="com.gym.entity.ClassOrder">
         UPDATE class_order SET
         class_id = #{classId},
+        class_name = #{className},
         coach = #{coach},
         member_name = #{memberName},
         member_account = #{memberAccount},
-        class_begin = #{classBegin}
+        class_begin = #{classBegin},
+        status = #{status}
         WHERE class_order_id = #{classOrderId}
     </update>
+
+    <update id="updateStatus">
+        UPDATE class_order SET status = #{status}
+        WHERE class_order_id = #{classOrderId}
+    </update>
+
+    <update id="batchCancelByClassId">
+        UPDATE class_order SET status = 'CANCELLED'
+        WHERE class_id = #{classId} AND status = 'BOOKED'
+    </update>
+
+    <select id="getBookedOrdersByClassId" resultMap="ClassOrderMap">
+        SELECT * FROM class_order
+        WHERE class_id = #{classId} AND status = 'BOOKED'
+    </select>
 
     <delete id="deleteOrder">
         DELETE FROM class_order WHERE class_order_id = #{classOrderId}
     </delete>
+
+    <!-- 课程更新时同步未开课(BOOKED)订单的快照字段，历史订单保持不变 -->
+    <update id="syncBookedByClassId">
+        UPDATE class_order SET
+            class_name = #{className},
+            class_begin = #{classBegin},
+            coach = #{coach}
+        WHERE class_id = #{classId} AND status = 'BOOKED'
+    </update>
 </mapper>

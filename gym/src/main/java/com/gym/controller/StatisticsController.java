@@ -76,7 +76,7 @@ public class StatisticsController {
 
         Map<String, Integer> byCardTime = new LinkedHashMap<>();
         for (var m : members) {
-            String key = m.getCardTime() != null ? m.getCardTime() : "未知";
+            String key = m.getCardTime() != null ? m.getCardTime().toString() : "未知";
             byCardTime.merge(key, 1, Integer::sum);
         }
         for (var entry : byCardTime.entrySet()) {

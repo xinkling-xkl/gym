@@ -1,0 +1,141 @@
+package org.example.plan.controller;
+
+import com.alibaba.csp.sentinel.annotation.SentinelResource;
+import org.example.plan.common.Result;
+import org.example.plan.entity.FitnessPlan;
+import org.example.plan.entity.PlanItem;
+import org.example.plan.service.FitnessPlanService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
+/**
+ * 会员健身计划管理接口
+ * 限流异常由 GlobalExceptionHandler 统一处理，无需 blockHandler
+ */
+@RestController
+@RequestMapping("/api/plan")
+@CrossOrigin(origins = "*")
+public class FitnessPlanController {
+
+    @Autowired
+    private FitnessPlanService fitnessPlanService;
+
+    // ==================== 计划 ====================
+
+    /** 查询会员的所有计划（含训练项明细） */
+    @GetMapping("/member/{account}")
+    @SentinelResource(value = "plan-list")
+    public Result<List<FitnessPlan>> getPlansByMember(@PathVariable Integer account) {
+        List<FitnessPlan> plans = fitnessPlanService.getPlansByMember(account);
+        return Result.success(plans);
+    }
+
+    /** 查询单个计划详情 */
+    @GetMapping("/{planId}")
+    @SentinelResource(value = "plan-get")
+    public Result<FitnessPlan> getPlanById(@PathVariable Integer planId) {
+        FitnessPlan plan = fitnessPlanService.getPlanById(planId);
+        if (plan != null) {
+            return Result.success(plan);
+        }
+        return Result.error(404, "计划不存在");
+    }
+
+    /** 新增计划 */
+    @PostMapping("/add")
+    @SentinelResource(value = "plan-add")
+    public Result<Void> addPlan(@RequestBody FitnessPlan plan) {
+        boolean ok = fitnessPlanService.addPlan(plan);
+        return ok ? Result.success("创建计划成功", null)
+                  : Result.error(500, "创建计划失败");
+    }
+
+    /** 更新计划基础信息 */
+    @PutMapping("/update")
+    @SentinelResource(value = "plan-update")
+    public Result<Void> updatePlan(@RequestBody FitnessPlan plan) {
+        boolean ok = fitnessPlanService.updatePlan(plan);
+        return ok ? Result.success("更新成功", null)
+                  : Result.error(500, "更新失败");
+    }
+
+    /** 更新计划状态（ACTIVE / COMPLETED / ARCHIVED） */
+    @PutMapping("/status/{planId}")
+    @SentinelResource(value = "plan-status")
+    public Result<Void> updateStatus(@PathVariable Integer planId, @RequestParam String status) {
+        boolean ok = fitnessPlanService.updatePlanStatus(planId, status);
+        return ok ? Result.success("状态更新成功", null)
+                  : Result.error(500, "状态更新失败");
+    }
+
+    /** 删除计划（级联删除训练项） */
+    @DeleteMapping("/delete/{planId}")
+    @SentinelResource(value = "plan-delete")
+    public Result<Void> deletePlan(@PathVariable Integer planId) {
+        boolean ok = fitnessPlanService.deletePlan(planId);
+        return ok ? Result.success("删除成功", null)
+                  : Result.error(404, "计划不存在");
+    }
+
+    // ==================== 训练项 ====================
+
+    /** 新增训练项 */
+    @PostMapping("/item/add")
+    @SentinelResource(value = "plan-item-add")
+    public Result<Void> addItem(@RequestBody PlanItem item) {
+        boolean ok = fitnessPlanService.addItem(item);
+        return ok ? Result.success("添加训练项成功", null)
+                  : Result.error(500, "添加失败");
+    }
+
+    /** 更新训练项 */
+    @PutMapping("/item/update")
+    @SentinelResource(value = "plan-item-update")
+    public Result<Void> updateItem(@RequestBody PlanItem item) {
+        boolean ok = fitnessPlanService.updateItem(item);
+        return ok ? Result.success("更新成功", null)
+                  : Result.error(500, "更新失败");
+    }
+
+    /** 删除训练项 */
+    @DeleteMapping("/item/delete/{itemId}")
+    @SentinelResource(value = "plan-item-delete")
+    public Result<Void> deleteItem(@PathVariable Integer itemId) {
+        boolean ok = fitnessPlanService.deleteItem(itemId);
+        return ok ? Result.success("删除成功", null)
+                  : Result.error(404, "训练项不存在");
+    }
+
+    /** 切换训练项完成状态：completed=1 标记完成，0 标记未完成 */
+    @PutMapping("/item/toggle/{itemId}")
+    @SentinelResource(value = "plan-item-toggle")
+    public Result<Void> toggleCompleted(@PathVariable Integer itemId, @RequestParam Integer completed) {
+        boolean ok = fitnessPlanService.toggleItemCompleted(itemId, completed);
+        return ok ? Result.success("状态切换成功", null)
+                  : Result.error(404, "训练项不存在");
+    }
+
+    // ==================== 同步课程订单 ====================
+
+    /**
+     * 一键同步会员已预约课程到指定计划
+     * 通过 Feign 调用 gym 主服务拉取 BOOKED 状态订单，去重后批量插入训练项
+     */
+    @PostMapping("/sync/{planId}/{account}")
+    @SentinelResource(value = "plan-sync")
+    public Result<Integer> syncFromOrders(@PathVariable Integer planId, @PathVariable Integer account) {
+        try {
+            int inserted = fitnessPlanService.syncFromOrders(planId, account);
+            String msg = inserted > 0
+                    ? "同步成功，新增 " + inserted + " 项训练项"
+                    : "暂无可同步的新课程（已全部同步过）";
+            return Result.success(msg, inserted);
+        } catch (IllegalArgumentException e) {
+            return Result.error(404, e.getMessage());
+        } catch (RuntimeException e) {
+            return Result.error(500, e.getMessage());
+        }
+    }
+}

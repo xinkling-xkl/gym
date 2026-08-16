@@ -38,6 +38,12 @@ public class CheckInController {
         return Result.success(checkIn);
     }
 
+    @GetMapping("/class/{orderId}")
+    @SentinelResource(value = "checkin-class", blockHandler = "handleBlock")
+    public Result<CheckIn> getClassCheckIn(@PathVariable Integer orderId) {
+        return Result.success(checkInService.getClassCheckInByOrder(orderId));
+    }
+
     @PostMapping
     @SentinelResource(value = "checkin-add", blockHandler = "handleBlock")
     public Result<String> checkIn(@RequestBody Map<String, Object> body) {
@@ -47,11 +53,17 @@ public class CheckInController {
         Integer classOrderId = classOrderIdObj != null ? Integer.parseInt(classOrderIdObj.toString()) : null;
         String checkInType = (String) body.getOrDefault("checkInType", "GYM");
 
-        boolean success = checkInService.checkIn(memberAccount, memberName, classOrderId, checkInType);
-        if (success) {
-            return Result.success("签到成功", null);
+        int result = checkInService.checkIn(memberAccount, memberName, classOrderId, checkInType);
+        switch (result) {
+            case 1: return Result.success("签到成功", null);
+            case -1: return Result.error(400, "今日已自主训练签到，无需重复签到");
+            case -2: return Result.error(400, "该课程已签到，无需重复签到");
+            case -3: return Result.error(400, "订单不存在或状态不可签到");
+            case -4: return Result.error(400, "未到开课时间，无法签到");
+            case -5: return Result.error(400, "已超过开课4小时，无法签到");
+            case -6: return Result.error(400, "课程签到缺少订单ID");
+            default: return Result.error(400, "签到失败");
         }
-        return Result.error(400, "今日已签到，无需重复签到");
     }
 
     public Result<Void> handleBlock(BlockException e) {

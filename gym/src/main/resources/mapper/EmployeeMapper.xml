@@ -9,6 +9,10 @@
         SELECT * FROM employee WHERE employee_account = #{employeeAccount}
     </select>
 
+    <select id="getEmployeeByName" resultType="com.gym.entity.Employee">
+        SELECT * FROM employee WHERE employee_name = #{employeeName} LIMIT 1
+    </select>
+
     <insert id="addEmployee" parameterType="com.gym.entity.Employee">
         INSERT INTO employee (employee_account, employee_name, employee_gender, employee_age, entry_time, staff, employee_message, employee_password)
         VALUES (#{employeeAccount}, #{employeeName}, #{employeeGender}, #{employeeAge}, #{entryTime}, #{staff}, #{employeeMessage}, #{employeePassword})

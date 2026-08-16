@@ -34,7 +34,7 @@ public class NotificationController {
 
     @PostMapping("/read/{notificationId}")
     @SentinelResource(value = "notification-read", blockHandler = "handleBlock")
-    public Result<Void> markAsRead(@PathVariable String notificationId) {
+    public Result<Void> markAsRead(@PathVariable Long notificationId) {
         notificationService.markAsRead(notificationId);
         return Result.success("已标记为已读", null);
     }
@@ -55,7 +55,7 @@ public class NotificationController {
 
     @DeleteMapping("/{notificationId}")
     @SentinelResource(value = "notification-delete", blockHandler = "handleBlock")
-    public Result<Void> deleteNotification(@PathVariable String notificationId) {
+    public Result<Void> deleteNotification(@PathVariable Long notificationId) {
         notificationService.deleteNotification(notificationId);
         return Result.success("通知已删除", null);
     }

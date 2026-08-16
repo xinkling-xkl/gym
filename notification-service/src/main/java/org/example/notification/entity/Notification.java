@@ -14,9 +14,9 @@ import java.time.LocalDateTime;
 public class Notification {
 
     /**
-     * 通知ID
+     * 通知ID（数据库自增）
      */
-    private String id;
+    private Long id;
 
     /**
      * 接收用户ID

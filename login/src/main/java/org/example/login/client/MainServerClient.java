@@ -17,4 +17,8 @@ public interface MainServerClient {
 
     @GetMapping("/api/employee/{account}")
     Map<String, Object> getEmployee(@PathVariable("account") Integer account);
+
+    /** 统一用户查询 — 自动判断属于哪张表 */
+    @GetMapping("/api/user/{account}")
+    Map<String, Object> getUserByAccount(@PathVariable("account") Integer account);
 }

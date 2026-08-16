@@ -10,8 +10,18 @@
     </select>
 
     <select id="getTodayCheckIn" resultType="com.gym.entity.CheckIn">
-        SELECT * FROM check_in WHERE member_account = #{memberAccount}
-        AND DATE(check_in_time) = CURDATE() LIMIT 1
+        SELECT * FROM check_in
+        WHERE member_account = #{memberAccount}
+          AND check_in_type = 'GYM'
+          AND DATE(check_in_time) = CURDATE() LIMIT 1
+    </select>
+
+    <!-- 按预约订单查询课程签到记录（每订单仅一次） -->
+    <select id="getClassCheckInByOrder" resultType="com.gym.entity.CheckIn">
+        SELECT * FROM check_in
+        WHERE class_order_id = #{classOrderId}
+          AND check_in_type = 'CLASS'
+        LIMIT 1
     </select>
 
     <insert id="addCheckIn" parameterType="com.gym.entity.CheckIn">

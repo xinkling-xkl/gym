@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.example.plan.mapper.PlanItemMapper">
+
+    <resultMap id="ItemMap" type="org.example.plan.entity.PlanItem">
+        <id property="itemId" column="item_id"/>
+        <result property="planId" column="plan_id"/>
+        <result property="dayOfWeek" column="day_of_week"/>
+        <result property="classId" column="class_id"/>
+        <result property="exercise" column="exercise"/>
+        <result property="duration" column="duration"/>
+        <result property="sets" column="sets"/>
+        <result property="reps" column="reps"/>
+        <result property="notes" column="notes"/>
+        <result property="completed" column="completed"/>
+        <result property="scheduledTime" column="scheduled_time"/>
+        <result property="coachName" column="coach_name"/>
+    </resultMap>
+
+    <select id="getItemsByPlanId" resultMap="ItemMap">
+        SELECT * FROM plan_item
+        WHERE plan_id = #{planId}
+        ORDER BY day_of_week, item_id
+    </select>
+
+    <insert id="addItem" parameterType="org.example.plan.entity.PlanItem" useGeneratedKeys="true" keyProperty="itemId">
+        INSERT INTO plan_item (plan_id, day_of_week, class_id, exercise, duration, sets, reps, notes, completed,
+                               scheduled_time, coach_name)
+        VALUES (#{planId}, #{dayOfWeek}, #{classId}, #{exercise}, #{duration}, #{sets}, #{reps}, #{notes},
+                <choose>
+                    <when test="completed != null">#{completed}</when>
+                    <otherwise>0</otherwise>
+                </choose>,
+                #{scheduledTime}, #{coachName})
+    </insert>
+
+    <update id="updateItem" parameterType="org.example.plan.entity.PlanItem">
+        UPDATE plan_item SET
+            day_of_week    = #{dayOfWeek},
+            class_id       = #{classId},
+            exercise       = #{exercise},
+            duration       = #{duration},
+            sets           = #{sets},
+            reps           = #{reps},
+            notes          = #{notes},
+            scheduled_time = #{scheduledTime},
+            coach_name     = #{coachName}
+        WHERE item_id = #{itemId}
+    </update>
+
+    <delete id="deleteItem">
+        DELETE FROM plan_item WHERE item_id = #{itemId}
+    </delete>
+
+    <delete id="deleteByPlanId">
+        DELETE FROM plan_item WHERE plan_id = #{planId}
+    </delete>
+
+    <update id="toggleCompleted">
+        UPDATE plan_item SET completed = #{completed} WHERE item_id = #{itemId}
+    </update>
+
+    <!-- 同步去重：查询某计划下是否已存在指定课程的训练项 -->
+    <select id="countByPlanIdAndClassId" resultType="java.lang.Integer">
+        SELECT COUNT(*) FROM plan_item
+        WHERE plan_id = #{planId} AND class_id = #{classId}
+    </select>
+
+    <!-- 通过训练项ID查询所属计划ID（用于越权校验） -->
+    <select id="getPlanIdByItemId" resultType="java.lang.Integer">
+        SELECT plan_id FROM plan_item WHERE item_id = #{itemId}
+    </select>
+</mapper>

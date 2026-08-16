@@ -70,7 +70,7 @@ import axios from 'axios'
 import { useRouter } from 'vue-router'
 
 const router = useRouter()
-const userName = ref(localStorage.getItem('name') || '')
+const userName = ref(sessionStorage.getItem('name') || '')
 const overview = ref({ totalMembers: 0, totalEquipments: 0, totalOrders: 0, totalCheckIns: 0 })
 const today = ref({ todayCheckIns: 0, todayOrders: 0 })
 const memberGrowthChart = ref(null)
@@ -78,7 +78,7 @@ const equipmentChart = ref(null)
 const courseHotChart = ref(null)
 
 const handleLogout = () => {
-  localStorage.clear()
+  sessionStorage.clear()
   window.location.href = '/'
 }
 

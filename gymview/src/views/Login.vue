@@ -54,13 +54,18 @@ const handleLogin = async () => {
 
     if (response.data.code === 200) {
       const loginData = response.data.data
-      localStorage.setItem('token', loginData.token)
-      localStorage.setItem('role', loginData.role)
-      localStorage.setItem('name', loginData.name)
-      localStorage.setItem('account', loginData.account)
+      sessionStorage.setItem('token', loginData.token)
+      sessionStorage.setItem('role', loginData.role)
+      sessionStorage.setItem('name', loginData.name)
+      sessionStorage.setItem('account', loginData.account)
+      if (loginData.staff) {
+        sessionStorage.setItem('staff', loginData.staff)
+      }
 
       if (loginData.role === 'ADMIN') {
         window.location.href = '/admin'
+      } else if (loginData.role === 'EMPLOYEE') {
+        window.location.href = '/employee'
       } else {
         window.location.href = '/home'
       }

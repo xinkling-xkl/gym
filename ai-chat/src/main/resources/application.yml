@@ -8,22 +8,27 @@ spring:
     import: "nacos:common.yaml?group=DEFAULT_GROUP"
   cloud:
     nacos:
+      username: ${NACOS_AUTH_USERNAME:nacos}
+      password: ${NACOS_AUTH_PASSWORD:nacos}
       discovery:
-        server-addr: 192.168.80.1:8848
+        server-addr: localhost:8848
       config:
-        server-addr: 192.168.80.1:8848
+        server-addr: localhost:8848
     sentinel:
       transport:
-        dashboard: localhost:8858
         port: 8723
-      eager: true
   data:
     redis:
       host: localhost
       port: 6379
+      password: ${REDIS_PASSWORD:123456}
+      database: 0
       timeout: 3000ms
 
-# Python AI 服务地址
-ai:
-  python:
-    url: http://localhost:8000
+deepseek:
+  # ★ 请将下方占位符替换为你的真实 DeepSeek API Key
+  # 获取地址：https://platform.deepseek.com/api_keys
+  # 也可通过环境变量 DEEPSEEK_API_KEY 注入，或在 Nacos 中配置 deepseek.api-key
+  api-key: ${DEEPSEEK_API_KEY:sk-your-key-here}
+  base-url: https://api.deepseek.com/v1
+  model: deepseek-chat

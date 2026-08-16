@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.HashMap;
 import java.util.Map;
 
 @RestController
@@ -34,73 +35,36 @@ public class LoginController {
         }
         String password = (String) loginData.get("password");
 
-        Map<String, Object> adminResult = mainServerClient.getAdmin(account);
+        // 统一查询：main-server 自动判断 admin/member/employee
+        Map<String, Object> userResult = mainServerClient.getUserByAccount(account);
 
-        if (adminResult != null && (Integer) adminResult.get("code") == 200) {
-            Map<String, Object> adminData = (Map<String, Object>) adminResult.get("data");
-            String storedPassword = (String) adminData.get("adminPassword");
+        if (userResult == null || (Integer) userResult.get("code") != 200) {
+            return Result.error(404, "账号不存在");
+        }
 
-            if (checkPassword(password, storedPassword)) {
-                String token = JwtUtil.generateToken(account, "管理员", "ADMIN");
-                Map<String, Object> data = Map.of(
-                        "token", token,
-                        "role", "ADMIN",
-                        "name", "管理员",
-                        "account", account
-                );
-                return Result.success("管理员登录成功", data);
-            }
+        Map<String, Object> userData = (Map<String, Object>) userResult.get("data");
+        String role = (String) userData.get("role");
+        String name = (String) userData.get("name");
+        String storedPassword = (String) userData.get("password");
+        Object staffObj = userData.get("staff");
+        String staff = staffObj != null ? staffObj.toString() : "";
+
+        if (!checkPassword(password, storedPassword)) {
             return Result.error(401, "密码错误");
         }
 
-        Map<String, Object> memberResult = mainServerClient.getMember(account);
-
-        if (memberResult != null && (Integer) memberResult.get("code") == 200) {
-            Map<String, Object> memberData = (Map<String, Object>) memberResult.get("data");
-            String storedPassword = (String) memberData.get("memberPassword");
-            String memberName = (String) memberData.get("memberName");
-
-            if (checkPassword(password, storedPassword)) {
-                String token = JwtUtil.generateToken(account, memberName, "MEMBER");
-                Map<String, Object> data = Map.of(
-                        "token", token,
-                        "role", "MEMBER",
-                        "name", memberName,
-                        "account", account
-                );
-                return Result.success("会员登录成功", data);
-            }
-            return Result.error(401, "密码错误");
+        String token = JwtUtil.generateToken(account, name, role);
+        Map<String, Object> data = new HashMap<>();
+        data.put("token", token);
+        data.put("role", role);
+        data.put("name", name);
+        data.put("account", account);
+        if (!staff.isEmpty()) {
+            data.put("staff", staff);
         }
-
-        // 检查员工表
-        Map<String, Object> employeeResult = mainServerClient.getEmployee(account);
-
-        if (employeeResult != null && (Integer) employeeResult.get("code") == 200) {
-            Map<String, Object> employeeData = (Map<String, Object>) employeeResult.get("data");
-            String storedPassword = (String) employeeData.get("employeePassword");
-            String employeeName = (String) employeeData.get("employeeName");
-
-            if (checkPassword(password, storedPassword)) {
-                String token = JwtUtil.generateToken(account, employeeName, "EMPLOYEE");
-                Map<String, Object> data = Map.of(
-                        "token", token,
-                        "role", "EMPLOYEE",
-                        "name", employeeName,
-                        "account", account
-                );
-                return Result.success("员工登录成功", data);
-            }
-            return Result.error(401, "密码错误");
-        }
-
-        return Result.error(404, "账号不存在");
+        return Result.success(role + "登录成功", data);
     }
 
-    /**
-     * 密码校验：优先 BCrypt，兼容旧明文密码。
-     * 若数据库密码为明文，请重新创建用户或手动更新为 BCrypt 密文。
-     */
     private boolean checkPassword(String rawPassword, String storedPassword) {
         if (storedPassword == null) return false;
         if (storedPassword.startsWith("$2a$") || storedPassword.startsWith("$2b$") || storedPassword.startsWith("$2y$")) {

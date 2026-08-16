@@ -45,6 +45,14 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
             return unauthorized(exchange, "令牌无效或已过期");
         }
 
+        // 解析 JWT 将用户信息注入 Header，下游服务直接读取
+        var claims = JwtUtil.parseToken(token);
+        exchange = exchange.mutate()
+                .request(r -> r.header("X-User-Account", String.valueOf(claims.get("account")))
+                        .header("X-User-Name", String.valueOf(claims.get("name")))
+                        .header("X-User-Role", String.valueOf(claims.get("role"))))
+                .build();
+
         return chain.filter(exchange);
     }
 

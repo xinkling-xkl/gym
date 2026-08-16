@@ -7,7 +7,7 @@ import java.util.List;
 public interface NotificationService {
 
     /**
-     * 发送通知
+     * 发送通知（存 MySQL + WebSocket 实时推送）
      */
     void sendNotification(Notification notification);
 
@@ -24,7 +24,7 @@ public interface NotificationService {
     /**
      * 标记通知为已读
      */
-    void markAsRead(String notificationId);
+    void markAsRead(Long notificationId);
 
     /**
      * 标记所有通知为已读
@@ -34,5 +34,5 @@ public interface NotificationService {
     /**
      * 删除通知
      */
-    void deleteNotification(String notificationId);
+    void deleteNotification(Long notificationId);
 }

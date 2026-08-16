@@ -72,7 +72,7 @@ export default defineConfig({
         ws: true,
       },
       '/api/ai': {
-        target: 'http://localhost:8090',
+        target: 'http://localhost:8086',
         changeOrigin: true,
         ws: true,
       },
@@ -83,6 +83,11 @@ export default defineConfig({
       },
       '/ws': {
         target: 'http://localhost:8088',
+        changeOrigin: true,
+        ws: true,
+      },
+      '/api/plan': {
+        target: 'http://localhost:8086',
         changeOrigin: true,
         ws: true,
       },
