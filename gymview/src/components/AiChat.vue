@@ -108,9 +108,24 @@ const sendMessage = async () => {
   }
 }
 
+// 加载历史对话（从 Redis 恢复）
+const loadHistory = async () => {
+  try {
+    const response = await axios.get('/api/ai/history', {
+      params: { userId: userId.value }
+    })
+    if (response.data.code === 200 && response.data.data) {
+      messages.value = response.data.data
+      await scrollToBottom()
+    }
+  } catch (error) {
+    console.error('Load history error:', error)
+  }
+}
+
 const clearChat = async () => {
   if (!confirm('确定要清空聊天记录吗？')) return
-  
+
   try {
     await axios.post('/api/ai/clear', { userId: userId.value })
     messages.value = []
@@ -120,7 +135,7 @@ const clearChat = async () => {
 }
 
 onMounted(() => {
-  scrollToBottom()
+  loadHistory()
 })
 </script>
 
