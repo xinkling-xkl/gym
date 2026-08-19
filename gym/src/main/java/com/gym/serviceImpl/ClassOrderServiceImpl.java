@@ -30,6 +30,8 @@ public class ClassOrderServiceImpl implements ClassOrderService {
     private static final int MEMBER_CHECKIN_LIMIT_HOURS = 4;
     /** 教练完成/旷课操作最晚时间（开课后 6 小时内） */
     private static final int COACH_OPERATE_LIMIT_HOURS = 6;
+    /** 取消预约后冷却时间（分钟），冷却期内不可重新预约同一课程 */
+    private static final int REBOOK_COOLDOWN_MINUTES = 5;
 
     @Autowired
     private ClassOrderMapper classOrderMapper;
@@ -153,6 +155,12 @@ public class ClassOrderServiceImpl implements ClassOrderService {
             return -7;
         }
 
+        // 取消后冷却检查：5 分钟内不可重新预约同一课程
+        String cooldownKey = "cancel:cooldown:" + classOrder.getMemberAccount() + ":" + classOrder.getClassId();
+        if (redissonClient.getBucket(cooldownKey).isExists()) {
+            return -10;
+        }
+
         if (cls.getMaxCapacity() != null && cls.getMaxCapacity() > 0) {
             int booked = classOrderMapper.countBookedByClassId(cls.getClassId());
             if (booked >= cls.getMaxCapacity()) {
@@ -218,6 +226,11 @@ public class ClassOrderServiceImpl implements ClassOrderService {
         }
         // 天数有效期制，取消预约不再退课时
         classOrderMapper.updateStatus(classOrderId, "CANCELLED");
+
+        // 设置冷却 key：5 分钟内不可重新预约同一课程
+        String cooldownKey = "cancel:cooldown:" + order.getMemberAccount() + ":" + order.getClassId();
+        redissonClient.getBucket(cooldownKey).set("1", REBOOK_COOLDOWN_MINUTES, TimeUnit.MINUTES);
+
         return 1;
     }
 

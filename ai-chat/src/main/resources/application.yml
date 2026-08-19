@@ -24,11 +24,19 @@ spring:
       password: ${REDIS_PASSWORD:123456}
       database: 0
       timeout: 3000ms
+  # Spring AI：通过 OpenAI 兼容接口调用 DeepSeek
+  ai:
+    openai:
+      api-key: ${DEEPSEEK_API_KEY:sk-your-key-here}
+      base-url: https://api.deepseek.com
+      chat:
+        options:
+          model: deepseek-chat
+          temperature: 0.7
+          max-tokens: 800
 
 deepseek:
-  # ★ 请将下方占位符替换为你的真实 DeepSeek API Key
-  # 获取地址：https://platform.deepseek.com/api_keys
-  # 也可通过环境变量 DEEPSEEK_API_KEY 注入，或在 Nacos 中配置 deepseek.api-key
+  # 旧配置保留兼容，实际由 spring.ai.openai 驱动
   api-key: ${DEEPSEEK_API_KEY:sk-your-key-here}
   base-url: https://api.deepseek.com/v1
   model: deepseek-chat
