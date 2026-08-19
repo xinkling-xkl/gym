@@ -1,6 +1,6 @@
 package com.gym.serviceImpl;
 
-import com.gym.client.NotificationClient;
+import com.gym.service.NotificationProducer;
 import com.gym.entity.Member;
 import com.gym.service.MemberService;
 import com.gym.service.TimeService;
@@ -29,7 +29,7 @@ public class MemberExpireScheduler {
     private MemberService memberService;
 
     @Autowired
-    private NotificationClient notificationClient;
+    private NotificationProducer notificationProducer;
 
     @Autowired
     private TimeService timeService;
@@ -58,7 +58,7 @@ public class MemberExpireScheduler {
                         + " 过期（已过期 " + expiredDays + " 天），请及时续费以继续享受健身服务。");
                 notification.put("type", "SYSTEM");
 
-                notificationClient.sendNotification(notification);
+                notificationProducer.sendNotification(notification);
                 sentCount++;
             } catch (Exception e) {
                 log.error("发送过期通知失败, memberAccount={}", member.getMemberAccount(), e);

@@ -29,6 +29,9 @@ public class MemberController {
     @Autowired
     private MemberExpireScheduler memberExpireScheduler;
 
+    @Autowired
+    private org.springframework.security.crypto.password.PasswordEncoder passwordEncoder;
+
     @GetMapping("/list")
     @SentinelResource(value = "member-list", blockHandler = "handleBlock")
     public Result<List<Member>> getAllMembers() {
@@ -116,7 +119,7 @@ public class MemberController {
         if (member == null) {
             return Result.error(404, "会员不存在");
         }
-        if (!member.getMemberPassword().equals(oldPassword)) {
+        if (!passwordEncoder.matches(oldPassword, member.getMemberPassword())) {
             return Result.error(400, "原密码错误");
         }
         boolean success = memberService.updatePassword(account, newPassword);

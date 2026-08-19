@@ -167,6 +167,19 @@
             <version>3.27.2</version>
         </dependency>
 
+        <!-- RocketMQ：通知链路异步解耦（2.2.x 兼容 rocketmq-client 4.9.x） -->
+        <dependency>
+            <groupId>org.apache.rocketmq</groupId>
+            <artifactId>rocketmq-spring-boot-starter</artifactId>
+            <version>2.2.3</version>
+        </dependency>
+        <!-- 锁定 rocketmq-client 4.x，避免被 Spring Cloud Alibaba BOM 升到 5.x 导致 NoSuchMethodError -->
+        <dependency>
+            <groupId>org.apache.rocketmq</groupId>
+            <artifactId>rocketmq-client</artifactId>
+            <version>4.9.4</version>
+        </dependency>
+
         <!-- Springdoc OpenAPI 接口文档（Swagger UI） -->
         <dependency>
             <groupId>org.springdoc</groupId>

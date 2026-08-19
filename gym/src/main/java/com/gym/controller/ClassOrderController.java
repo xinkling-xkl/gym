@@ -2,7 +2,7 @@ package com.gym.controller;
 
 import com.alibaba.csp.sentinel.annotation.SentinelResource;
 import com.alibaba.csp.sentinel.slots.block.BlockException;
-import com.gym.client.NotificationClient;
+import com.gym.service.NotificationProducer;
 import com.gym.common.Result;
 import com.gym.entity.ClassOrder;
 import com.gym.entity.ClassTable;
@@ -28,7 +28,7 @@ public class ClassOrderController {
     private ClassOrderService classOrderService;
 
     @Autowired
-    private NotificationClient notificationClient;
+    private NotificationProducer notificationProducer;
 
     @Autowired
     private ClassTableMapper classTableMapper;
@@ -248,7 +248,7 @@ public class ClassOrderController {
             body.put("title", title);
             body.put("content", content);
             body.put("type", type);
-            notificationClient.sendNotification(body);
+            notificationProducer.sendNotification(body);
         } catch (Exception ignored) {
         }
     }

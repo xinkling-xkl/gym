@@ -10,6 +10,7 @@ import com.gym.mapper.MemberMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.util.*;
 
 @RestController
@@ -29,6 +30,9 @@ public class StatisticsController {
     @Autowired
     private CheckInMapper checkInMapper;
 
+    @Autowired
+    private com.gym.service.TimeService timeService;
+
     @GetMapping("/overview")
     @SentinelResource(value = "stats-overview", blockHandler = "handleBlock")
     public Result<Map<String, Object>> overview() {
@@ -43,27 +47,22 @@ public class StatisticsController {
     @GetMapping("/today")
     @SentinelResource(value = "stats-today", blockHandler = "handleBlock")
     public Result<Map<String, Object>> today() {
-        List<Map<String, Object>> allCheckIns = new ArrayList<>();
-        for (var ci : checkInMapper.getAllCheckIns()) {
-            Map<String, Object> map = new HashMap<>();
-            map.put("checkInTime", ci.getCheckInTime());
-            allCheckIns.add(map);
-        }
-
-        // 统计今日签到数
-        long todayCheckIns = allCheckIns.stream()
-                .filter(m -> {
-                    Date d = (Date) m.get("checkInTime");
-                    Calendar cal = Calendar.getInstance();
-                    cal.setTime(d);
-                    Calendar today = Calendar.getInstance();
-                    return cal.get(Calendar.YEAR) == today.get(Calendar.YEAR)
-                            && cal.get(Calendar.DAY_OF_YEAR) == today.get(Calendar.DAY_OF_YEAR);
-                }).count();
+        LocalDate today = timeService.nowDate();
+        java.time.ZoneId zone = java.time.ZoneId.systemDefault();
+        // 统计今日签到数：按签到日期等于今天过滤
+        long todayCheckIns = checkInMapper.getAllCheckIns().stream()
+                .filter(ci -> ci.getCheckInTime() != null
+                        && ci.getCheckInTime().toInstant().atZone(zone).toLocalDate().equals(today))
+                .count();
+        // 统计今日订单数：按开课日期等于今天过滤
+        long todayOrders = classOrderMapper.getAllOrders().stream()
+                .filter(o -> o.getClassBegin() != null
+                        && o.getClassBegin().toLocalDate().equals(today))
+                .count();
 
         Map<String, Object> data = new HashMap<>();
         data.put("todayCheckIns", todayCheckIns);
-        data.put("todayOrders", classOrderMapper.getAllOrders().size()); // 简化：可加日期过滤
+        data.put("todayOrders", todayOrders);
         return Result.success(data);
     }
 

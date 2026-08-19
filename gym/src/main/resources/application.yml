@@ -28,6 +28,13 @@ spring:
       password: 123456
       database: 0
 
+# RocketMQ：gym 作为生产者，把通知消息异步投递到 broker
+rocketmq:
+  name-server: localhost:9876
+  producer:
+    group: notify-producer-group
+    send-message-timeout: 3000
+
 mybatis:
   type-aliases-package: com.gym.entity
   mapper-locations: classpath:mapper/*.xml

@@ -1,6 +1,6 @@
 package com.gym.serviceImpl;
 
-import com.gym.client.NotificationClient;
+import com.gym.service.NotificationProducer;
 import com.gym.entity.ClassOrder;
 import com.gym.entity.Employee;
 import com.gym.mapper.ClassOrderMapper;
@@ -36,7 +36,7 @@ public class ClassReminderScheduler {
     private ClassOrderMapper classOrderMapper;
 
     @Autowired
-    private NotificationClient notificationClient;
+    private NotificationProducer notificationProducer;
 
     @Autowired
     private TimeService timeService;
@@ -73,7 +73,7 @@ public class ClassReminderScheduler {
                             + " 开课，教练：" + (order.getCoach() != null ? order.getCoach() : "-")
                             + "。请提前 10 分钟到场准备。");
                     body.put("type", "CLASS_REMINDER");
-                    notificationClient.sendNotification(body);
+                    notificationProducer.sendNotification(body);
                     sentCount++;
                 }
 
@@ -90,7 +90,7 @@ public class ClassReminderScheduler {
                                 + (order.getClassBegin() != null ? order.getClassBegin().format(FORMATTER) : "")
                                 + " 开课，请提前准备。");
                         body.put("type", "CLASS_REMINDER");
-                        notificationClient.sendNotification(body);
+                        notificationProducer.sendNotification(body);
                         sentCount++;
                     }
                 }

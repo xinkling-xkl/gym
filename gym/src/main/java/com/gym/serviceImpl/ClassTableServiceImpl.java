@@ -1,6 +1,6 @@
 package com.gym.serviceImpl;
 
-import com.gym.client.NotificationClient;
+import com.gym.service.NotificationProducer;
 import com.gym.entity.ClassOrder;
 import com.gym.entity.ClassTable;
 import com.gym.mapper.ClassOrderMapper;
@@ -25,7 +25,7 @@ public class ClassTableServiceImpl implements ClassTableService {
     private ClassOrderMapper classOrderMapper;
 
     @Autowired
-    private NotificationClient notificationClient;
+    private NotificationProducer notificationProducer;
 
     @Autowired
     private TimeService timeService;
@@ -78,7 +78,7 @@ public class ClassTableServiceImpl implements ClassTableService {
                     body.put("content", "您预约的课程【" + classTable.getClassName()
                             + "】信息已更新，请关注最新安排。");
                     body.put("type", "COURSE_UPDATE");
-                    notificationClient.sendNotification(body);
+                    notificationProducer.sendNotification(body);
                 } catch (Exception ignored) {
                     // 通知失败不影响主流程
                 }

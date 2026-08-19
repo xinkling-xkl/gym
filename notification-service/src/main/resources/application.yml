@@ -27,6 +27,12 @@ spring:
     password: 123456
     driver-class-name: com.mysql.cj.jdbc.Driver
 
+# RocketMQ：notification-service 作为消费者，消费通知消息后落库 + WebSocket 推送
+rocketmq:
+  name-server: localhost:9876
+  consumer:
+    group: notify-consumer-group
+
 mybatis:
   type-aliases-package: org.example.notification.entity
   mapper-locations: classpath:mapper/*.xml

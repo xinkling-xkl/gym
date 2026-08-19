@@ -78,6 +78,46 @@ services:
     networks:
       - gym-net
 
+  rocketmq-namesrv:
+    image: apache/rocketmq:4.9.4
+    container_name: gym-rocketmq-namesrv
+    restart: always
+    command: sh mqnamesrv
+    ports:
+      - "9876:9876"
+    networks:
+      - gym-net
+
+  rocketmq-broker:
+    image: apache/rocketmq:4.9.4
+    container_name: gym-rocketmq-broker
+    restart: always
+    depends_on:
+      - rocketmq-namesrv
+    command: sh mqbroker -n rocketmq-namesrv:9876 -c /home/rocketmq/rocketmq-4.9.4/conf/broker.conf
+    environment:
+      NAMESRV_ADDR: rocketmq-namesrv:9876
+    ports:
+      - "10909:10909"
+      - "10911:10911"
+    volumes:
+      - ./rocketmq/broker.conf:/home/rocketmq/rocketmq-4.9.4/conf/broker.conf
+    networks:
+      - gym-net
+
+  rocketmq-dashboard:
+    image: apacherocketmq/rocketmq-dashboard:1.0.0
+    container_name: gym-rocketmq-dashboard
+    restart: always
+    depends_on:
+      - rocketmq-namesrv
+    environment:
+      JAVA_OPTS: "-Drocketmq.namesrv.addr=rocketmq-namesrv:9876 -Dcom.rocketmq.sendMessageWithHookTimeout=10000"
+    ports:
+      - "8082:8080"
+    networks:
+      - gym-net
+
   # ==================== 业务服务 ====================
   gym:
     build: ./gym
@@ -86,6 +126,8 @@ services:
     depends_on:
       nacos:
         condition: service_healthy
+      rocketmq-broker:
+        condition: service_started
     environment:
       SPRING_CLOUD_NACOS_DISCOVERY_SERVER-ADDR: nacos:8848
       SPRING_CLOUD_NACOS_CONFIG_SERVER-ADDR: nacos:8848
@@ -93,6 +135,7 @@ services:
       SPRING_DATASOURCE_USERNAME: root
       SPRING_DATASOURCE_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
       SPRING_CLOUD_SENTINEL_TRANSPORT_DASHBOARD: sentinel:8858
+      SPRING_ROCKETMQ_NAME-SERVER: rocketmq-namesrv:9876
     ports:
       - "8084:8084"
     networks:
@@ -167,12 +210,15 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      rocketmq-broker:
+        condition: service_started
     environment:
       SPRING_CLOUD_NACOS_DISCOVERY_SERVER-ADDR: nacos:8848
       SPRING_CLOUD_NACOS_CONFIG_SERVER-ADDR: nacos:8848
       SPRING_CLOUD_SENTINEL_TRANSPORT_DASHBOARD: sentinel:8858
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}
+      SPRING_ROCKETMQ_NAME-SERVER: rocketmq-namesrv:9876
     ports:
       - "8088:8088"
     networks:
