@@ -384,7 +384,7 @@ const toggleItemCompleted = async (item) => {
 
 // 一键同步已预约课程到当前计划
 const syncOrders = async (plan) => {
-  if (!confirm(`确定要将你已预约的课程同步到计划【${plan.planName}】吗？\n已同步过的课程会自动跳过。`)) return
+  if (!confirm(`确定要同步课程预约到计划【${plan.planName}】吗？\n新预约的课程将加入计划，已取消预约的课程训练项将被移除。`)) return
   try {
     const res = await axios.post(`/api/plan/sync/${plan.planId}/${userAccount.value}`)
     if (res.data.code === 200) {

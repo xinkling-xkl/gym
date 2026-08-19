@@ -19,6 +19,8 @@ import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Service
 public class ClassOrderServiceImpl implements ClassOrderService {
@@ -119,13 +121,28 @@ public class ClassOrderServiceImpl implements ClassOrderService {
             return -4;
         }
 
-        // 重复预约拦截：同会员对同课程已有 BOOKED 状态订单
+        // 重复预约 + 时段冲突拦截：同会员已预约的 BOOKED 订单
         List<ClassOrder> existOrders = classOrderMapper.getOrdersByMemberAccountAndStatus(
                 classOrder.getMemberAccount(), "BOOKED");
         if (existOrders != null) {
+            int newDuration = parseDurationMinutes(cls.getClassTime());
+            LocalDateTime newStart = cls.getClassBegin();
+            LocalDateTime newEnd = newStart != null
+                    ? newStart.plusMinutes(newDuration > 0 ? newDuration : 60)
+                    : null;
             for (ClassOrder o : existOrders) {
                 if (Objects.equals(o.getClassId(), classOrder.getClassId())) {
                     return -6;
+                }
+                // 时段冲突检测：同一会员在同一时段不能预约两门不同课程
+                if (newStart != null && newEnd != null && o.getClassBegin() != null) {
+                    ClassTable existCls = classTableMapper.getClassById(o.getClassId());
+                    int existDuration = existCls != null ? parseDurationMinutes(existCls.getClassTime()) : -1;
+                    LocalDateTime existStart = o.getClassBegin();
+                    LocalDateTime existEnd = existStart.plusMinutes(existDuration > 0 ? existDuration : 60);
+                    if (newStart.isBefore(existEnd) && existStart.isBefore(newEnd)) {
+                        return -9;
+                    }
                 }
             }
         }
@@ -154,6 +171,22 @@ public class ClassOrderServiceImpl implements ClassOrderService {
         // 课时制已改为天数有效期制，预约不再扣减课时
         classOrderMapper.addOrder(classOrder);
         return 1;
+    }
+
+    /**
+     * 解析课程时长（如"45分钟"→45），解析失败返回 -1
+     */
+    private int parseDurationMinutes(String classTime) {
+        if (classTime == null) return -1;
+        Matcher m = Pattern.compile("(\\d+)").matcher(classTime);
+        if (m.find()) {
+            try {
+                return Integer.parseInt(m.group(1));
+            } catch (NumberFormatException e) {
+                return -1;
+            }
+        }
+        return -1;
     }
 
     @Override

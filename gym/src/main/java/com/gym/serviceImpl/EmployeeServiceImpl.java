@@ -1,5 +1,6 @@
 package com.gym.serviceImpl;
 
+import com.gym.common.UserContext;
 import com.gym.entity.Employee;
 import com.gym.mapper.EmployeeMapper;
 import com.gym.service.EmployeeService;
@@ -33,6 +34,11 @@ public class EmployeeServiceImpl implements EmployeeService {
     }
 
     @Override
+    public List<Employee> getCoaches() {
+        return employeeMapper.getEmployeesByStaff("教练");
+    }
+
+    @Override
     public void addEmployee(Employee employee) {
         if (employee.getEmployeePassword() != null && !isEncrypted(employee.getEmployeePassword())) {
             employee.setEmployeePassword(passwordEncoder.encode(employee.getEmployeePassword()));
@@ -42,6 +48,19 @@ public class EmployeeServiceImpl implements EmployeeService {
 
     @Override
     public void updateEmployee(Employee employee) {
+        // 非管理员只能修改本人，且不能修改职务（防止员工自我提升越权）
+        String role = UserContext.getRole();
+        Integer currentAccount = UserContext.getAccount();
+        if (role != null && !"ADMIN".equals(role)) {
+            if (currentAccount == null || !currentAccount.equals(employee.getEmployeeAccount())) {
+                throw new IllegalStateException("无权修改他人资料");
+            }
+            Employee originForStaff = employeeMapper.getEmployeeByAccount(employee.getEmployeeAccount());
+            if (originForStaff != null) {
+                employee.setStaff(originForStaff.getStaff());
+            }
+        }
+
         // 全字段更新：密码为空或已加密则回填原密码，明文则加密
         if (employee.getEmployeePassword() == null || employee.getEmployeePassword().isEmpty()
                 || isEncrypted(employee.getEmployeePassword())) {

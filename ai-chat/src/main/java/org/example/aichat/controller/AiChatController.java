@@ -3,6 +3,7 @@ package org.example.aichat.controller;
 import com.alibaba.csp.sentinel.annotation.SentinelResource;
 import com.alibaba.csp.sentinel.slots.block.BlockException;
 import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
 import org.example.aichat.common.Result;
 import org.example.aichat.service.ConversationHistoryService;
@@ -14,7 +15,11 @@ import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.RestTemplate;
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @RestController
 @RequestMapping("/api/ai")
@@ -61,17 +66,32 @@ public class AiChatController {
 
         historyService.saveMessage(role, userId, "user", message);
         List<Map<String, String>> history = historyService.getHistory(role, userId);
-        List<Map<String, String>> messages = promptBuilder.buildMessages(role, message, history);
 
         try {
-            String reply = deepSeekService.chat(messages);
+            String reply;
 
-            // 命令解析：ADMIN 走 executeAdminCommand，MEMBER 走 executeMemberCommand
-            if (reply.contains("[CMD:")) {
-                if ("ADMIN".equals(role)) {
-                    reply = executeAdminCommand(reply);
-                } else if ("MEMBER".equals(role)) {
-                    reply = executeMemberCommand(reply, currentUserAccount);
+            // 状态机：优先处理「确认/取消」，直接执行已固化的待确认操作，不再依赖 AI 重新推理
+            JSONObject pending = historyService.getPending(role, userId);
+            if (pending != null && isCancelMessage(message)) {
+                historyService.clearPending(role, userId);
+                reply = "好的，已取消该操作。如需其他帮助请随时告诉我。";
+            } else if (pending != null && isConfirmMessage(message)) {
+                String pendingAction = pending.getString("action");
+                JSONObject pendingParams = pending.getJSONObject("params");
+                if (pendingParams == null) pendingParams = new JSONObject();
+                historyService.clearPending(role, userId);
+                reply = executeMemberAction(pendingAction, pendingParams, currentUserAccount, history, role, userId);
+            } else {
+                List<Map<String, String>> messages = promptBuilder.buildMessages(role, message, history);
+                reply = deepSeekService.chat(messages);
+
+                // 命令解析：ADMIN 走 executeAdminCommand，MEMBER 走 executeMemberCommand
+                if (reply.contains("[CMD:")) {
+                    if ("ADMIN".equals(role)) {
+                        reply = executeAdminCommand(reply);
+                    } else if ("MEMBER".equals(role)) {
+                        reply = executeMemberCommand(reply, currentUserAccount, history, role, userId);
+                    }
                 }
             }
 
@@ -122,8 +142,11 @@ public class AiChatController {
      * 解析并执行会员命令
      * @param reply AI 回复内容
      * @param account 当前会员账号（从 X-User-Account 注入，防止越权）
+     * @param history 当前会话历史（用于命令缺参数时自动补全课程信息）
+     * @param role 用户角色（用于 pending 状态存储）
+     * @param userId 用户ID（用于 pending 状态存储）
      */
-    private String executeMemberCommand(String reply, String account) {
+    private String executeMemberCommand(String reply, String account, List<Map<String, String>> history, String role, Integer userId) {
         try {
             int cmdStart = reply.indexOf("[CMD:");
             int cmdEnd = reply.indexOf("]", cmdStart);
@@ -135,14 +158,32 @@ public class AiChatController {
             String jsonStr = parts.length > 1 ? "{" + parts[1] : "{}";
             JSONObject params = JSON.parseObject(jsonStr);
 
-            return executeMemberAction(action, params, account);
+            return executeMemberAction(action, params, account, history, role, userId);
         } catch (Exception e) {
             return "命令执行失败：" + e.getMessage();
         }
     }
 
-    private String executeMemberAction(String action, JSONObject p, String account) {
+    private String executeMemberAction(String action, JSONObject p, String account, List<Map<String, String>> history, String role, Integer userId) {
         return switch (action) {
+            case "PROPOSE" -> {
+                // 提议写操作：把参数固化到 Redis，等待用户确认（状态机）
+                String proposeAction = p.getString("action");
+                if (proposeAction == null || proposeAction.isEmpty()) {
+                    yield "抱歉，我无法理解该操作，请重新描述。";
+                }
+                JSONObject execParams = new JSONObject();
+                for (String key : p.keySet()) {
+                    if (!"action".equals(key) && !"confirmText".equals(key)) {
+                        execParams.put(key, p.get(key));
+                    }
+                }
+                historyService.savePending(role, userId, proposeAction, execParams);
+                String confirmText = p.getString("confirmText");
+                yield (confirmText != null && !confirmText.isEmpty())
+                        ? confirmText
+                        : "好的，我已准备好执行该操作，请回复'确认'或'取消'。";
+            }
             case "CHECKIN" -> {
                 // 签到打卡：GYM 自主训练签到 / CLASS 课程签到
                 String checkInType = p.getString("checkInType");
@@ -164,29 +205,69 @@ public class AiChatController {
                 checkInBody.put("memberName", memberName);
                 yield callMainServer("/api/checkin", "POST", checkInBody, account);
             }
-            case "QUERY_CLASS" -> callMainServer("/api/class/list", "GET", null, account);
+            case "QUERY_CLASS" -> formatClassList(callMainServerResult("/api/class/available", "GET", null, account));
             case "QUERY_CLASS_DETAIL" -> {
                 Integer classId = p.getInteger("classId");
                 if (classId == null) {
                     yield "查询失败：缺少课程ID（classId）";
                 }
-                yield callMainServer("/api/class/" + classId, "GET", null, account);
+                yield formatClassDetail(callMainServerResult("/api/class/" + classId, "GET", null, account));
             }
             case "BOOK_CLASS" -> {
-                // 预约课程：需要 classId，先查课程详情补全 className/coach/classBegin
+                // 预约课程：按课程ID预约（AI 已查询到具体课程并获用户确认后调用）
                 Integer classId = p.getInteger("classId");
                 if (classId == null) {
-                    yield "预约失败：缺少课程ID（classId）";
+                    // AI 未带参数：自动从对话历史中提取最近提到的课程ID
+                    List<Integer> ids = extractClassIdsFromHistory(history);
+                    if (ids != null && !ids.isEmpty()) {
+                        classId = ids.get(ids.size() - 1);
+                    }
                 }
-                // 查询课程详情
-                String classInfo = callMainServer("/api/class/" + classId, "GET", null, account);
-                // 简化处理：直接调用预约接口，让后端补全
+                if (classId == null) {
+                    yield "预约失败：缺少课程ID（classId），请告诉我课程名称或星期几，如「帮我预约瑜伽课」或「帮我预约周一的课」";
+                }
                 JSONObject orderBody = new JSONObject();
                 orderBody.put("classId", classId);
                 orderBody.put("memberAccount", account);
-                yield callMainServer("/api/order/add", "POST", orderBody, account);
+                String bookResult = callMainServer("/api/order/add", "POST", orderBody, account);
+                if (bookResult != null && bookResult.contains("操作成功")) {
+                    callPlanServerResult("/api/plan/autoSync/" + account, "POST", null, account);
+                    yield bookResult + "\n📅 已自动同步到您的健身计划";
+                }
+                yield bookResult;
             }
-            case "QUERY_MY_ORDERS" -> callMainServer("/api/order/member/" + account, "GET", null, account);
+            case "BOOK_CLASS_BY_NAME" -> {
+                // 按课程名称或星期几智能匹配并预约
+                String keyword = p.getString("keyword");
+                if (keyword == null || keyword.trim().isEmpty()) {
+                    // AI 未带参数：自动从对话历史中提取最近提到的课程名
+                    String name = extractCourseNameFromHistory(history);
+                    if (name != null) {
+                        keyword = name;
+                    }
+                }
+                if (keyword == null || keyword.trim().isEmpty()) {
+                    yield "请告诉我课程名称或星期几，如「帮我预约周一的瑜伽课」";
+                }
+                yield smartBookClass(account, keyword.trim());
+            }
+            case "BOOK_MULTI" -> {
+                // 批量预约多门课程
+                JSONArray classIds = p.getJSONArray("classIds");
+                if (classIds == null || classIds.isEmpty()) {
+                    // AI 未带参数：自动从对话历史中提取最近确认的课程ID列表
+                    List<Integer> ids = extractClassIdsFromHistory(history);
+                    if (ids != null && !ids.isEmpty()) {
+                        classIds = new JSONArray();
+                        classIds.addAll(ids);
+                    }
+                }
+                if (classIds == null || classIds.isEmpty()) {
+                    yield "请告诉我课程名称或星期几，如「帮我预约瑜伽课」或「帮我预约周一的课」";
+                }
+                yield bookMultipleClasses(account, classIds);
+            }
+            case "QUERY_MY_ORDERS" -> formatOrders(callMainServerResult("/api/order/member/" + account, "GET", null, account));
             case "CANCEL_ORDER" -> {
                 Integer orderId = p.getInteger("classOrderId");
                 if (orderId == null) {
@@ -204,7 +285,7 @@ public class AiChatController {
                 planBody.put("status", "ACTIVE");
                 yield callPlanServer("/api/plan/add", "POST", planBody, account);
             }
-            case "QUERY_MY_PLANS" -> callPlanServer("/api/plan/member/" + account, "GET", null, account);
+            case "QUERY_MY_PLANS" -> formatPlans(callPlanServerResult("/api/plan/member/" + account, "GET", null, account));
             case "QUERY_MY_BMI" -> {
                 // 查询会员身体数据并计算 BMI
                 JSONObject data = callMainServerForData("/api/member/" + account, "GET", null, account);
@@ -254,6 +335,19 @@ public class AiChatController {
         };
     }
 
+    private static final Set<String> CONFIRM_WORDS = Set.of("确认", "确定", "好的", "好", "是的", "可以", "嗯", "行", "ok", "yes");
+    private static final Set<String> CANCEL_WORDS = Set.of("取消", "不用了", "算了", "不要了", "不了", "cancel", "no");
+
+    private boolean isConfirmMessage(String message) {
+        if (message == null) return false;
+        return CONFIRM_WORDS.contains(message.trim().toLowerCase());
+    }
+
+    private boolean isCancelMessage(String message) {
+        if (message == null) return false;
+        return CANCEL_WORDS.contains(message.trim().toLowerCase());
+    }
+
     /**
      * 查询会员姓名（签到接口需要）
      */
@@ -294,7 +388,7 @@ public class AiChatController {
     }
 
     /**
-     * 智能创建健身计划：根据会员 BMI 和目标自动生成
+     * 智能创建健身计划：根据会员 BMI 和目标自动生成计划及训练项
      */
     private String smartCreatePlan(String account, String goal) {
         try {
@@ -313,7 +407,10 @@ public class AiChatController {
             double heightM = height / 100.0;
             double bmi = weight / (heightM * heightM);
 
-            // 3. 根据目标 + BMI 生成计划内容
+            // 3. 根据目标 + BMI 生成训练项明细
+            JSONArray items = buildPlanItems(goal, bmi);
+
+            // 4. 构造计划（含训练项）
             JSONObject plan = new JSONObject();
             String planName = switch (goal) {
                 case "增肌" -> "智能增肌计划";
@@ -330,11 +427,15 @@ public class AiChatController {
             java.time.LocalDate end = start.plusMonths(1);
             plan.put("startDate", start.toString());
             plan.put("endDate", end.toString());
+            plan.put("items", items);
 
-            // 4. 调用 plan-server 创建计划
-            String createResult = callPlanServer("/api/plan/add", "POST", plan, account);
+            // 5. 调用 plan-server 一次性创建计划 + 训练项
+            JSONObject result = callPlanServerResult("/api/plan/createWithItems", "POST", plan, account);
+            if (result == null || result.getInteger("code") == null || result.getInteger("code") != 200) {
+                return "创建失败：" + (result != null ? result.getString("message") : "服务不可用");
+            }
 
-            // 5. 根据 BMI + 目标生成训练建议
+            // 6. 生成友好文本（含训练项清单）
             StringBuilder sb = new StringBuilder();
             sb.append("🏋️ 根据您的身体数据已生成专属健身计划\n");
             sb.append("━━━━━━━━━━━━━━━\n");
@@ -343,9 +444,18 @@ public class AiChatController {
             sb.append(String.format("目标：%s\n", goal));
             sb.append(String.format("周期：%s 至 %s\n", start, end));
             sb.append("━━━━━━━━━━━━━━━\n");
-            sb.append("📋 训练建议：\n");
-            sb.append(buildTrainingAdvice(goal, bmi));
-            sb.append("\n✅ 计划已创建，请在「健身计划」页面查看详情");
+            sb.append("📋 训练安排：\n");
+            for (int i = 0; i < items.size(); i++) {
+                JSONObject it = items.getJSONObject(i);
+                sb.append("• ").append(dayOfWeekName(it.getInteger("dayOfWeek")))
+                        .append("：").append(it.getString("exercise"));
+                if (it.getInteger("duration") != null) sb.append(" ").append(it.getInteger("duration")).append("分钟");
+                if (it.getInteger("sets") != null) sb.append(" ").append(it.getInteger("sets")).append("组");
+                if (it.getInteger("reps") != null) sb.append("×").append(it.getInteger("reps")).append("次");
+                if (it.getString("notes") != null) sb.append("（").append(it.getString("notes")).append("）");
+                sb.append("\n");
+            }
+            sb.append("\n✅ 计划及训练项已创建，请在「健身计划」页面查看详情");
             return sb.toString();
         } catch (Exception e) {
             return "智能创建计划失败：" + e.getMessage();
@@ -353,42 +463,269 @@ public class AiChatController {
     }
 
     /**
-     * 根据目标 + BMI 生成训练建议
+     * 根据目标 + BMI 生成训练项明细列表
      */
-    private String buildTrainingAdvice(String goal, double bmi) {
-        return switch (goal) {
-            case "增肌" -> """
-                    • 周一：胸肌训练（哑铃卧推 4组×8-12次）
-                    • 周三：背部训练（引体向上 4组×8-12次）
-                    • 周五：腿部训练（深蹲 4组×8-12次）
-                    • 周日：手臂训练（杠铃弯举 4组×12次）
-                    • 每日补充蛋白质 1.5-2g/kg 体重""";
+    private JSONArray buildPlanItems(String goal, double bmi) {
+        JSONArray items = new JSONArray();
+        switch (goal) {
+            case "增肌" -> {
+                items.add(planItem(1, "胸肌训练", 60, 4, 12, "哑铃卧推"));
+                items.add(planItem(3, "背部训练", 60, 4, 12, "引体向上"));
+                items.add(planItem(5, "腿部训练", 60, 4, 12, "深蹲"));
+                items.add(planItem(7, "手臂训练", 45, 4, 12, "杠铃弯举"));
+            }
             case "减脂" -> {
                 if (bmi >= 28) {
-                    yield """
-                            • 周一/三/五：有氧训练（慢跑/椭圆机 40分钟，心率120-140）
-                            • 周二/四：低强度力量训练（哑铃 3组×15次）
-                            • 周六：游泳或骑行 60分钟
-                            • 每日热量赤字 500kcal，控制碳水摄入""";
+                    items.add(planItem(1, "有氧训练", 40, null, null, "慢跑/椭圆机，心率120-140"));
+                    items.add(planItem(2, "低强度力量", 30, 3, 15, "哑铃"));
+                    items.add(planItem(3, "有氧训练", 40, null, null, "慢跑/椭圆机"));
+                    items.add(planItem(4, "低强度力量", 30, 3, 15, "哑铃"));
+                    items.add(planItem(5, "有氧训练", 40, null, null, "慢跑/椭圆机"));
+                    items.add(planItem(6, "游泳或骑行", 60, null, null, "中低强度"));
+                } else {
+                    items.add(planItem(1, "有氧训练", 30, null, null, "慢跑"));
+                    items.add(planItem(2, "HIIT训练", 20, null, null, "高强度间歇"));
+                    items.add(planItem(3, "有氧训练", 30, null, null, "慢跑"));
+                    items.add(planItem(4, "HIIT训练", 20, null, null, "高强度间歇"));
+                    items.add(planItem(5, "有氧训练", 30, null, null, "慢跑"));
+                    items.add(planItem(6, "力量训练", 30, 4, 12, "哑铃"));
                 }
-                yield """
-                        • 周一/三/五：有氧训练（慢跑 30分钟）
-                        • 周二/四：HIIT 高强度间歇训练 20分钟
-                        • 周六：力量训练（哑铃 4组×12次）
-                        • 每日热量赤字 300kcal，均衡饮食""";
             }
-            case "塑形" -> """
-                    • 周一：上半身塑形（俯卧撑+哑铃飞鸟 4组×12次）
-                    • 周三：下半身塑形（深蹲+弓步蹲 4组×15次）
-                    • 周五：核心训练（平板支撑+卷腹 4组×20次）
-                    • 周日：瑜伽或拉伸 30分钟
-                    • 保持蛋白质摄入，控制脂肪摄入""";
-            default -> """
-                    • 周一/三/五：有氧训练 30分钟（慢跑/骑行）
-                    • 周二/四：力量训练 30分钟（哑铃基础动作）
-                    • 周六：瑜伽或拉伸 30分钟
-                    • 保持均衡饮食，每日饮水 2L""";
+            case "塑形" -> {
+                items.add(planItem(1, "上半身塑形", 45, 4, 12, "俯卧撑+哑铃飞鸟"));
+                items.add(planItem(3, "下半身塑形", 45, 4, 15, "深蹲+弓步蹲"));
+                items.add(planItem(5, "核心训练", 30, 4, 20, "平板支撑+卷腹"));
+                items.add(planItem(7, "瑜伽/拉伸", 30, null, null, "放松拉伸"));
+            }
+            default -> {
+                items.add(planItem(1, "有氧训练", 30, null, null, "慢跑/骑行"));
+                items.add(planItem(2, "力量训练", 30, null, null, "哑铃基础动作"));
+                items.add(planItem(3, "有氧训练", 30, null, null, "慢跑/骑行"));
+                items.add(planItem(4, "力量训练", 30, null, null, "哑铃基础动作"));
+                items.add(planItem(5, "有氧训练", 30, null, null, "慢跑/骑行"));
+                items.add(planItem(6, "瑜伽/拉伸", 30, null, null, "放松拉伸"));
+            }
+        }
+        return items;
+    }
+
+    /**
+     * 构造单个训练项
+     */
+    private JSONObject planItem(int dayOfWeek, String exercise, int duration, Integer sets, Integer reps, String notes) {
+        JSONObject item = new JSONObject();
+        item.put("dayOfWeek", dayOfWeek);
+        item.put("exercise", exercise);
+        item.put("duration", duration);
+        item.put("sets", sets);
+        item.put("reps", reps);
+        item.put("notes", notes);
+        item.put("completed", 0);
+        return item;
+    }
+
+    /**
+     * 星期几转中文
+     */
+    private String dayOfWeekName(int dayOfWeek) {
+        return switch (dayOfWeek) {
+            case 1 -> "周一";
+            case 2 -> "周二";
+            case 3 -> "周三";
+            case 4 -> "周四";
+            case 5 -> "周五";
+            case 6 -> "周六";
+            case 7 -> "周日";
+            default -> "周" + dayOfWeek;
         };
+    }
+
+    /**
+     * 智能预约：根据课程名称或星期几匹配可预约课程并预约
+     */
+    private String smartBookClass(String account, String keyword) {
+        // 1. 查询可预约课程列表
+        JSONObject result = callMainServerResult("/api/class/available", "GET", null, account);
+        if (result == null || result.getInteger("code") == null || result.getInteger("code") != 200) {
+            return "查询课程失败，请稍后重试";
+        }
+        JSONArray data = result.getJSONArray("data");
+        if (data == null || data.isEmpty()) {
+            return "当前暂无可预约的课程";
+        }
+
+        // 2. 判断 keyword 是星期几还是课程名
+        int targetDay = weekdayToNumber(keyword);
+
+        // 3. 匹配课程
+        List<JSONObject> matched = new ArrayList<>();
+        for (int i = 0; i < data.size(); i++) {
+            JSONObject c = data.getJSONObject(i);
+            String className = c.getString("className");
+            String classBegin = c.getString("classBegin");
+
+            if (targetDay > 0) {
+                // 按星期几匹配
+                if (parseClassDayOfWeek(classBegin) == targetDay) {
+                    matched.add(c);
+                }
+            } else {
+                // 按课程名模糊匹配
+                if (className != null && className.contains(keyword)) {
+                    matched.add(c);
+                }
+            }
+        }
+
+        // 4. 处理匹配结果
+        if (matched.isEmpty()) {
+            return "抱歉，没有找到匹配「" + keyword + "」的可预约课程。您可以问我「有什么课程」查看全部课程";
+        }
+
+        if (matched.size() == 1) {
+            // 唯一匹配，直接预约
+            JSONObject c = matched.get(0);
+            Integer classId = c.getInteger("classId");
+            JSONObject orderBody = new JSONObject();
+            orderBody.put("classId", classId);
+            orderBody.put("memberAccount", account);
+            String bookResult = callMainServer("/api/order/add", "POST", orderBody, account);
+
+            StringBuilder sb = new StringBuilder();
+            sb.append("已为您匹配到「").append(c.getString("className")).append("」，正在预约...\n");
+            sb.append(bookResult);
+
+            // 预约成功后，自动同步到健身计划
+            if (bookResult != null && bookResult.contains("操作成功")) {
+                JSONObject syncResult = callPlanServerResult("/api/plan/autoSync/" + account, "POST", null, account);
+                if (syncResult != null && syncResult.getInteger("code") != null && syncResult.getInteger("code") == 200) {
+                    sb.append("\n📅 已自动同步到您的健身计划");
+                }
+            }
+            return sb.toString();
+        }
+
+        // 多个匹配，让用户选择
+        StringBuilder sb = new StringBuilder("找到多门匹配「" + keyword + "」的课程：\n");
+        for (int i = 0; i < matched.size(); i++) {
+            JSONObject c = matched.get(i);
+            sb.append("【ID:").append(c.getInteger("classId")).append("】 ").append(c.getString("className"));
+            if (c.getString("classBegin") != null) sb.append("（").append(c.getString("classBegin")).append("）");
+            if (c.getString("coach") != null) sb.append(" ").append(c.getString("coach"));
+            sb.append("\n");
+        }
+        sb.append("\n请告诉我具体要预约哪门课程的ID，如「帮我预约ID为5的课程」");
+        return sb.toString();
+    }
+
+    /**
+     * 批量预约多门课程
+     */
+    private String bookMultipleClasses(String account, JSONArray classIds) {
+        StringBuilder sb = new StringBuilder("📋 批量预约结果：\n");
+        int success = 0;
+        for (int i = 0; i < classIds.size(); i++) {
+            Integer classId = classIds.getInteger(i);
+            if (classId == null) continue;
+            JSONObject orderBody = new JSONObject();
+            orderBody.put("classId", classId);
+            orderBody.put("memberAccount", account);
+            String r = callMainServer("/api/order/add", "POST", orderBody, account);
+            sb.append("• 课程ID ").append(classId).append("：").append(r).append("\n");
+            if (r != null && r.contains("操作成功")) {
+                success++;
+            }
+        }
+
+        // 至少一门预约成功后，自动同步到健身计划
+        if (success > 0) {
+            JSONObject syncResult = callPlanServerResult("/api/plan/autoSync/" + account, "POST", null, account);
+            if (syncResult != null && syncResult.getInteger("code") != null && syncResult.getInteger("code") == 200) {
+                sb.append("\n📅 已自动同步到您的健身计划");
+            }
+        }
+        return sb.toString();
+    }
+
+    /**
+     * 从对话历史中提取课程ID（匹配 "ID:16"、"ID 16"、"ID：16"、"（ID 7）" 等写法）
+     * 从最近的助手消息往前找，返回第一条含ID消息中的全部ID（保持出现顺序）
+     */
+    private List<Integer> extractClassIdsFromHistory(List<Map<String, String>> history) {
+        if (history == null) return null;
+        Pattern pattern = Pattern.compile("ID[\\s:：]*(\\d+)");
+        for (int i = history.size() - 1; i >= 0; i--) {
+            Map<String, String> msg = history.get(i);
+            if (!"assistant".equals(msg.get("role"))) continue;
+            String content = msg.get("content");
+            if (content == null) continue;
+            Matcher m = pattern.matcher(content);
+            List<Integer> ids = new ArrayList<>();
+            while (m.find()) {
+                try {
+                    ids.add(Integer.parseInt(m.group(1)));
+                } catch (NumberFormatException ignored) {
+                }
+            }
+            if (!ids.isEmpty()) return ids;
+        }
+        return null;
+    }
+
+    /**
+     * 从对话历史中提取最近提到的课程名（「」或『』包裹的内容）
+     */
+    private String extractCourseNameFromHistory(List<Map<String, String>> history) {
+        if (history == null) return null;
+        Pattern pattern = Pattern.compile("[「『]([^」』]{1,30})[」』]");
+        for (int i = history.size() - 1; i >= 0; i--) {
+            Map<String, String> msg = history.get(i);
+            if (!"assistant".equals(msg.get("role"))) continue;
+            String content = msg.get("content");
+            if (content == null || content.contains("[CMD:")) continue;
+            Matcher m = pattern.matcher(content);
+            String last = null;
+            while (m.find()) {
+                last = m.group(1).trim();
+            }
+            if (last != null) return last;
+        }
+        return null;
+    }
+
+    /**
+     * 中文星期几转数字（1-7），无法识别返回 -1
+     */
+    private int weekdayToNumber(String weekday) {
+        if (weekday == null) return -1;
+        return switch (weekday) {
+            case "周一", "星期一", "礼拜一", "周1", "星期1" -> 1;
+            case "周二", "星期二", "礼拜二", "周2", "星期2" -> 2;
+            case "周三", "星期三", "礼拜三", "周3", "星期3" -> 3;
+            case "周四", "星期四", "礼拜四", "周4", "星期4" -> 4;
+            case "周五", "星期五", "礼拜五", "周5", "星期5" -> 5;
+            case "周六", "星期六", "礼拜六", "周6", "星期6" -> 6;
+            case "周日", "周天", "星期日", "星期天", "礼拜日", "礼拜天", "周7", "星期7" -> 7;
+            default -> -1;
+        };
+    }
+
+    /**
+     * 解析课程开课时间的星期几（1-7），解析失败返回 -1
+     */
+    private int parseClassDayOfWeek(String classBegin) {
+        if (classBegin == null || classBegin.isEmpty()) return -1;
+        try {
+            LocalDateTime dt;
+            if (classBegin.contains("T")) {
+                dt = LocalDateTime.parse(classBegin);
+            } else {
+                dt = LocalDateTime.parse(classBegin, DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+            }
+            return dt.getDayOfWeek().getValue();
+        } catch (Exception e) {
+            return -1;
+        }
     }
 
     /**
@@ -396,6 +733,13 @@ public class AiChatController {
      */
     private String callPlanServer(String path, String method, JSONObject body, String account) {
         return callService("http://plan-server" + path, method, body, account);
+    }
+
+    /**
+     * 调用 plan-server 并返回完整 Result JSON（含 code/message/data）
+     */
+    private JSONObject callPlanServerResult(String path, String method, JSONObject body, String account) {
+        return callServiceResult("http://plan-server" + path, method, body, account);
     }
 
     // ==================== 管理员命令执行 ====================
@@ -426,11 +770,11 @@ public class AiChatController {
             case "QUERY" -> {
                 String type = p.getString("type");
                 yield switch (type) {
-                    case "member" -> callMainServer("/api/member/list", "GET", null);
-                    case "employee" -> callMainServer("/api/employee/list", "GET", null);
-                    case "equipment" -> callMainServer("/api/equipment/list", "GET", null);
-                    case "class" -> callMainServer("/api/class/list", "GET", null);
-                    case "order" -> callMainServer("/api/order/list", "GET", null);
+                    case "member" -> formatAdminQuery("member", callMainServerResult("/api/member/list", "GET", null, null));
+                    case "employee" -> formatAdminQuery("employee", callMainServerResult("/api/employee/list", "GET", null, null));
+                    case "equipment" -> formatAdminQuery("equipment", callMainServerResult("/api/equipment/list", "GET", null, null));
+                    case "class" -> formatAdminQuery("class", callMainServerResult("/api/class/list", "GET", null, null));
+                    case "order" -> formatAdminQuery("order", callMainServerResult("/api/order/list", "GET", null, null));
                     default -> "未知查询类型：" + type;
                 };
             }
@@ -464,6 +808,13 @@ public class AiChatController {
      */
     private JSONObject callMainServerForData(String path, String method, JSONObject body, String account) {
         return callServiceForData("http://main-server" + path, method, body, account);
+    }
+
+    /**
+     * 调用 main-server 并返回完整 Result JSON（含 code/message/data）
+     */
+    private JSONObject callMainServerResult(String path, String method, JSONObject body, String account) {
+        return callServiceResult("http://main-server" + path, method, body, account);
     }
 
     /**
@@ -540,6 +891,223 @@ public class AiChatController {
         } catch (Exception e) {
             return null;
         }
+    }
+
+    /**
+     * 通用服务调用，返回完整的 Result JSON 对象（含 code/message/data）
+     * 供查询命令格式化自然语言使用
+     */
+    private JSONObject callServiceResult(String url, String method, JSONObject body, String account) {
+        try {
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            if (account != null && !account.isEmpty()) {
+                headers.set("X-User-Account", account);
+                headers.set("X-User-Role", "MEMBER");
+            }
+
+            ResponseEntity<String> response;
+            if ("GET".equals(method)) {
+                response = restTemplate.exchange(url, HttpMethod.GET, new HttpEntity<>(headers), String.class);
+            } else if ("DELETE".equals(method)) {
+                response = restTemplate.exchange(url, HttpMethod.DELETE, new HttpEntity<>(headers), String.class);
+            } else {
+                HttpEntity<String> request = new HttpEntity<>(body != null ? body.toJSONString() : "{}", headers);
+                response = restTemplate.exchange(url, "PUT".equals(method) ? HttpMethod.PUT : HttpMethod.POST,
+                        request, String.class);
+            }
+            return JSON.parseObject(response.getBody());
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    // ==================== 查询结果格式化（自然语言） ====================
+
+    /**
+     * 格式化课程列表（可预约课程）
+     */
+    private String formatClassList(JSONObject result) {
+        if (result == null || result.getInteger("code") == null || result.getInteger("code") != 200) {
+            return "查询课程失败，请稍后重试";
+        }
+        JSONArray data = result.getJSONArray("data");
+        if (data == null || data.isEmpty()) {
+            return "当前暂无可预约的课程，您可以过会儿再来看看～";
+        }
+        StringBuilder sb = new StringBuilder("📋 当前可预约课程如下：\n");
+        for (int i = 0; i < data.size(); i++) {
+            JSONObject c = data.getJSONObject(i);
+            sb.append("【ID:").append(c.getInteger("classId")).append("】 ").append(c.getString("className"));
+            if (c.getString("coach") != null) sb.append("（").append(c.getString("coach")).append("）");
+            sb.append("\n");
+            if (c.getString("classBegin") != null) sb.append("   ⏰ ").append(c.getString("classBegin"));
+            if (c.getString("classTime") != null) sb.append("   ⏱️ ").append(c.getString("classTime"));
+            Integer max = c.getInteger("maxCapacity");
+            Integer booked = c.getInteger("bookedCount");
+            if (max != null && max > 0) {
+                int remain = max - (booked == null ? 0 : booked);
+                sb.append("   👥 剩余名额 ").append(remain).append("/").append(max);
+            }
+            sb.append("\n");
+        }
+        sb.append("\n💡 想预约哪节课？告诉我课程ID即可，如「帮我预约ID为5的课程」");
+        return sb.toString();
+    }
+
+    /**
+     * 格式化单个课程详情
+     */
+    private String formatClassDetail(JSONObject result) {
+        if (result == null || result.getInteger("code") == null || result.getInteger("code") != 200) {
+            return "查询课程详情失败，请稍后重试";
+        }
+        JSONObject c = result.getJSONObject("data");
+        if (c == null) return "课程不存在";
+        StringBuilder sb = new StringBuilder("📄 课程详情：\n");
+        sb.append("课程：").append(c.getString("className")).append("\n");
+        if (c.getString("coach") != null) sb.append("教练：").append(c.getString("coach")).append("\n");
+        if (c.getString("classBegin") != null) sb.append("开课时间：").append(c.getString("classBegin")).append("\n");
+        if (c.getString("classTime") != null) sb.append("时长：").append(c.getString("classTime")).append("\n");
+        Integer max = c.getInteger("maxCapacity");
+        Integer booked = c.getInteger("bookedCount");
+        if (max != null && max > 0) {
+            sb.append("剩余名额：").append(max - (booked == null ? 0 : booked)).append("/").append(max).append("\n");
+        }
+        sb.append("\n💡 需要预约吗？回复「确认预约」即可");
+        return sb.toString();
+    }
+
+    /**
+     * 格式化我的预约记录
+     */
+    private String formatOrders(JSONObject result) {
+        if (result == null || result.getInteger("code") == null || result.getInteger("code") != 200) {
+            return "查询预约失败，请稍后重试";
+        }
+        JSONArray data = result.getJSONArray("data");
+        if (data == null || data.isEmpty()) {
+            return "您当前没有预约任何课程";
+        }
+        StringBuilder sb = new StringBuilder("📋 您的预约记录：\n");
+        for (int i = 0; i < data.size(); i++) {
+            JSONObject o = data.getJSONObject(i);
+            sb.append(i + 1).append(". ").append(o.getString("className"));
+            if (o.getString("coach") != null) sb.append("（").append(o.getString("coach")).append("）");
+            sb.append("\n");
+            if (o.getString("classBegin") != null) sb.append("   ⏰ ").append(o.getString("classBegin")).append("\n");
+            if (o.getString("status") != null) sb.append("   状态：").append(statusText(o.getString("status"))).append("\n");
+            if (o.getInteger("classOrderId") != null) sb.append("   订单ID：").append(o.getInteger("classOrderId")).append("\n");
+        }
+        sb.append("\n💡 如需取消预约，回复「取消订单X」（X为订单ID）");
+        return sb.toString();
+    }
+
+    /**
+     * 格式化我的健身计划
+     */
+    private String formatPlans(JSONObject result) {
+        if (result == null || result.getInteger("code") == null || result.getInteger("code") != 200) {
+            return "查询健身计划失败，请稍后重试";
+        }
+        JSONArray data = result.getJSONArray("data");
+        if (data == null || data.isEmpty()) {
+            return "您还没有健身计划，可以对我说「根据我的身体数据制定健身计划」来生成一个";
+        }
+        StringBuilder sb = new StringBuilder("📋 您的健身计划：\n");
+        for (int i = 0; i < data.size(); i++) {
+            JSONObject p = data.getJSONObject(i);
+            sb.append(i + 1).append(". ").append(p.getString("planName"));
+            if (p.getString("goal") != null) sb.append("（目标：").append(p.getString("goal")).append("）");
+            sb.append("\n");
+            if (p.getString("startDate") != null && p.getString("endDate") != null) {
+                sb.append("   📅 ").append(p.getString("startDate")).append(" ~ ").append(p.getString("endDate")).append("\n");
+            }
+            if (p.getString("status") != null) sb.append("   状态：").append(planStatusText(p.getString("status"))).append("\n");
+            JSONArray items = p.getJSONArray("items");
+            if (items != null && !items.isEmpty()) {
+                int done = 0;
+                for (int j = 0; j < items.size(); j++) {
+                    Integer completed = items.getJSONObject(j).getInteger("completed");
+                    if (completed != null && completed == 1) done++;
+                }
+                sb.append("   训练项：").append(done).append("/").append(items.size()).append(" 已完成\n");
+            }
+        }
+        return sb.toString();
+    }
+
+    /**
+     * 订单状态转中文
+     */
+    private String statusText(String status) {
+        return switch (status) {
+            case "BOOKED" -> "已预约";
+            case "COMPLETED" -> "已完成";
+            case "NO_SHOW" -> "已旷课";
+            case "CANCELED" -> "已取消";
+            default -> status;
+        };
+    }
+
+    /**
+     * 计划状态转中文
+     */
+    private String planStatusText(String status) {
+        return switch (status) {
+            case "ACTIVE" -> "进行中";
+            case "COMPLETED" -> "已完成";
+            case "ARCHIVED" -> "已归档";
+            default -> status;
+        };
+    }
+
+    /**
+     * 格式化管理员查询结果（按类型展示关键字段）
+     */
+    private String formatAdminQuery(String type, JSONObject result) {
+        if (result == null || result.getInteger("code") == null || result.getInteger("code") != 200) {
+            return "查询失败，请稍后重试";
+        }
+        JSONArray data = result.getJSONArray("data");
+        if (data == null || data.isEmpty()) {
+            return "未查询到相关数据";
+        }
+        StringBuilder sb = new StringBuilder("📋 查询结果（共 ").append(data.size()).append(" 条）：\n");
+        for (int i = 0; i < data.size(); i++) {
+            JSONObject o = data.getJSONObject(i);
+            sb.append(i + 1).append(". ");
+            switch (type) {
+                case "member" -> {
+                    sb.append(o.getString("memberName"));
+                    if (o.getInteger("memberAccount") != null) sb.append("（账号 ").append(o.getInteger("memberAccount")).append("）");
+                    if (o.getString("memberGender") != null) sb.append(" · ").append(o.getString("memberGender"));
+                    if (o.getString("cardExpireDate") != null) sb.append(" · 卡到期 ").append(o.getString("cardExpireDate"));
+                }
+                case "employee" -> {
+                    sb.append(o.getString("employeeName"));
+                    if (o.getInteger("employeeAccount") != null) sb.append("（账号 ").append(o.getInteger("employeeAccount")).append("）");
+                    if (o.getString("staff") != null) sb.append(" · ").append(o.getString("staff"));
+                }
+                case "equipment" -> {
+                    sb.append(o.getString("equipmentName"));
+                    if (o.getString("equipmentStatus") != null) sb.append(" · ").append(o.getString("equipmentStatus"));
+                    if (o.getString("equipmentLocation") != null) sb.append(" · ").append(o.getString("equipmentLocation"));
+                }
+                case "class" -> {
+                    sb.append(o.getString("className"));
+                    if (o.getString("coach") != null) sb.append(" · ").append(o.getString("coach"));
+                    if (o.getString("classBegin") != null) sb.append(" · ").append(o.getString("classBegin"));
+                }
+                case "order" -> {
+                    sb.append(o.getString("className"));
+                    if (o.getString("memberName") != null) sb.append(" · ").append(o.getString("memberName"));
+                    if (o.getString("status") != null) sb.append(" · ").append(statusText(o.getString("status")));
+                }
+            }
+            sb.append("\n");
+        }
+        return sb.toString();
     }
 
     @PostMapping("/clear")

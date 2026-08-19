@@ -25,6 +25,15 @@ public class EmployeeController {
         return Result.success(employees);
     }
 
+    /**
+     * 查询教练列表（公开，会员端用于展示教练个人资料）
+     */
+    @GetMapping("/coaches")
+    @SentinelResource(value = "employee-coaches", blockHandler = "handleBlock")
+    public Result<List<Employee>> getCoaches() {
+        return Result.success(employeeService.getCoaches());
+    }
+
     @GetMapping("/{account}")
     @SentinelResource(value = "employee-get", blockHandler = "handleBlock")
     public Result<Employee> getEmployeeByAccount(@PathVariable Integer account) {

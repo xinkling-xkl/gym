@@ -18,6 +18,9 @@ public interface ClassOrderMapper {
     /** 该课程下 COMPLETED/NO_SHOW 订单数（用于判断课程是否已被教练处理结束） */
     int countProcessedByClassId(Integer classId);
     List<ClassOrder> getBookedOrdersByClassId(Integer classId);
+    /** 查询开课时间在 [start, end] 区间内的 BOOKED 订单（用于开课前提醒） */
+    List<ClassOrder> getBookedOrdersInRange(@Param("start") java.time.LocalDateTime start,
+                                           @Param("end") java.time.LocalDateTime end);
     void addOrder(ClassOrder classOrder);
     void updateOrder(ClassOrder classOrder);
     void updateStatus(@Param("classOrderId") Integer classOrderId, @Param("status") String status);

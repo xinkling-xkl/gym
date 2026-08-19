@@ -2,6 +2,7 @@ package org.example.plan.controller;
 
 import com.alibaba.csp.sentinel.annotation.SentinelResource;
 import org.example.plan.common.Result;
+import org.example.plan.dto.SyncResult;
 import org.example.plan.entity.FitnessPlan;
 import org.example.plan.entity.PlanItem;
 import org.example.plan.service.FitnessPlanService;
@@ -50,6 +51,18 @@ public class FitnessPlanController {
         boolean ok = fitnessPlanService.addPlan(plan);
         return ok ? Result.success("创建计划成功", null)
                   : Result.error(500, "创建计划失败");
+    }
+
+    /** 创建计划及其训练项明细（一次性批量创建，供 AI 智能生成计划使用） */
+    @PostMapping("/createWithItems")
+    @SentinelResource(value = "plan-create-with-items")
+    public Result<FitnessPlan> createPlanWithItems(@RequestBody FitnessPlan plan) {
+        try {
+            FitnessPlan created = fitnessPlanService.createPlanWithItems(plan);
+            return Result.success("创建成功", created);
+        } catch (SecurityException e) {
+            return Result.error(403, e.getMessage());
+        }
     }
 
     /** 更新计划基础信息 */
@@ -120,20 +133,48 @@ public class FitnessPlanController {
     // ==================== 同步课程订单 ====================
 
     /**
-     * 一键同步会员已预约课程到指定计划
-     * 通过 Feign 调用 gym 主服务拉取 BOOKED 状态订单，去重后批量插入训练项
+     * 一键同步会员课程订单到指定计划（差量同步）
+     * 新预约的课程插入训练项，已取消/旷课的课程训练项自动移除
      */
     @PostMapping("/sync/{planId}/{account}")
     @SentinelResource(value = "plan-sync")
-    public Result<Integer> syncFromOrders(@PathVariable Integer planId, @PathVariable Integer account) {
+    public Result<SyncResult> syncFromOrders(@PathVariable Integer planId, @PathVariable Integer account) {
         try {
-            int inserted = fitnessPlanService.syncFromOrders(planId, account);
-            String msg = inserted > 0
-                    ? "同步成功，新增 " + inserted + " 项训练项"
-                    : "暂无可同步的新课程（已全部同步过）";
-            return Result.success(msg, inserted);
+            SyncResult result = fitnessPlanService.syncFromOrders(planId, account);
+            StringBuilder msg = new StringBuilder();
+            if (result.getInserted() > 0) {
+                msg.append("新增 ").append(result.getInserted()).append(" 项训练项");
+            }
+            if (result.getRemoved() > 0) {
+                if (msg.length() > 0) msg.append("，");
+                msg.append("移除 ").append(result.getRemoved()).append(" 项已取消课程的训练项");
+            }
+            if (msg.length() == 0) {
+                msg.append("暂无可同步的变更（已预约课程均已同步）");
+            }
+            return Result.success(msg.toString(), result);
         } catch (IllegalArgumentException e) {
             return Result.error(404, e.getMessage());
+        } catch (RuntimeException e) {
+            return Result.error(500, e.getMessage());
+        }
+    }
+
+    /**
+     * 自动同步课程订单到健身计划（无计划则自动创建）
+     * 供 AI 助手预约课程成功后调用
+     */
+    @PostMapping("/autoSync/{account}")
+    @SentinelResource(value = "plan-auto-sync")
+    public Result<SyncResult> autoSync(@PathVariable Integer account) {
+        try {
+            SyncResult result = fitnessPlanService.autoSyncOrders(account);
+            String msg = result.getInserted() > 0
+                    ? "自动同步成功，新增 " + result.getInserted() + " 项训练项"
+                    : "暂无可同步的新课程";
+            return Result.success(msg, result);
+        } catch (SecurityException e) {
+            return Result.error(403, e.getMessage());
         } catch (RuntimeException e) {
             return Result.error(500, e.getMessage());
         }

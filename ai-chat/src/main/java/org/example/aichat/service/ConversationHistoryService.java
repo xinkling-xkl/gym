@@ -1,6 +1,7 @@
 package org.example.aichat.service;
 
 import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson.JSONObject;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
@@ -23,6 +24,10 @@ public class ConversationHistoryService {
     // 对话历史过期时间（小时）
     private static final int EXPIRE_HOURS = 2;
 
+    // 待确认操作 key 前缀与过期时间
+    private static final String PENDING_PREFIX = "ai:pending:";
+    private static final int PENDING_EXPIRE_MINUTES = 30;
+
     /**
      * 构建用户专属 key：ai:chat:{role}:{userId}
      * 不同角色（MEMBER/EMPLOYEE/ADMIN）即使 userId 相同也不会冲突
@@ -30,6 +35,11 @@ public class ConversationHistoryService {
     private String buildKey(String role, Integer userId) {
         String r = (role == null || role.isEmpty()) ? "MEMBER" : role.toUpperCase();
         return PREFIX + r + ":" + userId;
+    }
+
+    private String buildPendingKey(String role, Integer userId) {
+        String r = (role == null || role.isEmpty()) ? "MEMBER" : role.toUpperCase();
+        return PENDING_PREFIX + r + ":" + userId;
     }
 
     /**
@@ -68,5 +78,34 @@ public class ConversationHistoryService {
      */
     public void clearHistory(String role, Integer userId) {
         redisTemplate.delete(buildKey(role, userId));
+    }
+
+    /**
+     * 保存待确认操作（AI 提议后、用户确认前，把操作参数固化到 Redis）
+     * @param action 执行命令名（如 BOOK_CLASS / BOOK_MULTI / CHECKIN 等）
+     * @param params 执行参数
+     */
+    public void savePending(String role, Integer userId, String action, JSONObject params) {
+        JSONObject obj = new JSONObject();
+        obj.put("action", action);
+        obj.put("params", params == null ? new JSONObject() : params);
+        redisTemplate.opsForValue().set(buildPendingKey(role, userId), obj.toJSONString(),
+                PENDING_EXPIRE_MINUTES, TimeUnit.MINUTES);
+    }
+
+    /**
+     * 读取待确认操作，不存在返回 null
+     */
+    public JSONObject getPending(String role, Integer userId) {
+        Object val = redisTemplate.opsForValue().get(buildPendingKey(role, userId));
+        if (val == null) return null;
+        return JSON.parseObject(val.toString());
+    }
+
+    /**
+     * 清除待确认操作
+     */
+    public void clearPending(String role, Integer userId) {
+        redisTemplate.delete(buildPendingKey(role, userId));
     }
 }

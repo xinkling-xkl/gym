@@ -178,6 +178,69 @@
           </div>
         </div>
 
+        <!-- 个人资料 -->
+        <div class="section">
+          <div class="section-header">
+            <h2>👤 个人资料</h2>
+            <button class="btn btn-primary btn-sm" @click="openProfileForm">编辑资料</button>
+          </div>
+          <div class="profile-card">
+            <div class="profile-avatar" v-if="myProfile.avatar">
+              <img :src="avatarUrl(myProfile.avatar)" alt="头像" />
+            </div>
+            <div class="profile-avatar placeholder" v-else>{{ (myProfile.employeeName || '教')[0] }}</div>
+            <div class="profile-info">
+              <h3>{{ myProfile.employeeName || userName }}</h3>
+              <p class="profile-meta">{{ myProfile.employeeGender || '-' }} · {{ myProfile.employeeAge || '-' }}岁 · {{ myProfile.staff || '教练' }}</p>
+              <p v-if="myProfile.specialty"><strong>擅长：</strong>{{ myProfile.specialty }}</p>
+              <p v-if="myProfile.certificate"><strong>资质：</strong>{{ myProfile.certificate }}</p>
+              <p v-if="myProfile.intro" class="profile-intro">{{ myProfile.intro }}</p>
+              <p v-if="!myProfile.specialty && !myProfile.certificate && !myProfile.intro" style="color:#999;">暂无资料，点击"编辑资料"完善</p>
+            </div>
+          </div>
+
+          <div v-if="showProfileForm" class="profile-form">
+            <div class="form-row avatar-row">
+              <label>头像</label>
+              <div class="avatar-edit">
+                <div class="avatar-preview" v-if="profileForm.avatar">
+                  <img :src="avatarUrl(profileForm.avatar)" alt="头像预览" />
+                </div>
+                <div class="avatar-preview placeholder" v-else>{{ (profileForm.employeeName || '教')[0] }}</div>
+                <label class="upload-btn">
+                  上传头像
+                  <input type="file" accept="image/*" @change="handleAvatarChange" hidden />
+                </label>
+                <span class="avatar-hint">支持 jpg/png，建议正方形</span>
+              </div>
+            </div>
+            <div class="form-row">
+              <label>性别</label>
+              <select v-model="profileForm.employeeGender"><option>男</option><option>女</option></select>
+            </div>
+            <div class="form-row">
+              <label>年龄</label>
+              <input v-model.number="profileForm.employeeAge" type="number" />
+            </div>
+            <div class="form-row">
+              <label>擅长领域</label>
+              <input v-model="profileForm.specialty" placeholder="如：增肌、减脂、瑜伽" />
+            </div>
+            <div class="form-row">
+              <label>资质证书</label>
+              <input v-model="profileForm.certificate" placeholder="如：国家职业健身教练认证" />
+            </div>
+            <div class="form-row">
+              <label>个人简介</label>
+              <textarea v-model="profileForm.intro" rows="3" placeholder="介绍您的从业经验和教学特色"></textarea>
+            </div>
+            <div class="form-actions">
+              <button class="btn btn-primary" @click="saveProfile">保存</button>
+              <button class="btn btn-default" @click="showProfileForm = false">取消</button>
+            </div>
+          </div>
+        </div>
+
         <!-- 我的课程 -->
         <div class="section">
           <div class="section-header">
@@ -470,6 +533,20 @@ const orderCoachFilter = ref('')
 const myClasses = ref([])
 const myOrders = ref([])
 const myOrderStatusFilter = ref('')
+
+// 教练个人资料
+const myProfile = ref({})
+const showProfileForm = ref(false)
+const profileForm = reactive({
+  employeeAccount: null,
+  employeeName: '',
+  avatar: '',
+  employeeGender: '',
+  employeeAge: null,
+  specialty: '',
+  certificate: '',
+  intro: ''
+})
 
 // 课程管理（教练对自己课程的增删改查）
 const showClassForm = ref(false)
@@ -839,11 +916,80 @@ const fetchMyOrders = async () => {
   } catch (e) { console.error('fetchMyOrders:', e) }
 }
 
+const fetchMyProfile = async () => {
+  try {
+    const res = await axios.get(`/api/employee/${userAccount.value}`)
+    if (res.data.code === 200) myProfile.value = res.data.data
+  } catch (e) { console.error('fetchMyProfile:', e) }
+}
+
+// DB 存相对路径如 /avatar/xxx.jpg，通过网关 /pictures 访问
+const avatarUrl = (avatar) => {
+  if (!avatar) return ''
+  if (avatar.startsWith('http')) return avatar
+  return '/pictures' + avatar
+}
+
+// 上传头像（与会员头像相同的文件存储方式）
+const handleAvatarChange = async (e) => {
+  const file = e.target.files[0]
+  if (!file) return
+  const formData = new FormData()
+  formData.append('file', file)
+  formData.append('folder', 'avatar')
+  try {
+    const res = await axios.post('/api/file/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+    if (res.data.code === 200) {
+      profileForm.avatar = res.data.data.url
+    } else {
+      alert('头像上传失败: ' + res.data.message)
+    }
+  } catch (err) {
+    console.error('upload avatar error:', err)
+    alert('头像上传失败')
+  } finally {
+    e.target.value = ''
+  }
+}
+
+const openProfileForm = () => {
+  const p = myProfile.value || {}
+  profileForm.employeeAccount = p.employeeAccount
+  profileForm.employeeName = p.employeeName || ''
+  profileForm.avatar = p.avatar || ''
+  profileForm.employeeGender = p.employeeGender || ''
+  profileForm.employeeAge = p.employeeAge
+  profileForm.specialty = p.specialty || ''
+  profileForm.certificate = p.certificate || ''
+  profileForm.intro = p.intro || ''
+  showProfileForm.value = true
+}
+
+const saveProfile = async () => {
+  try {
+    const body = { ...myProfile.value, ...profileForm }
+    const res = await axios.put('/api/employee/update', body)
+    if (res.data.code === 200) {
+      alert('资料已保存')
+      showProfileForm.value = false
+      fetchMyProfile()
+    } else {
+      alert('保存失败: ' + res.data.message)
+    }
+  } catch (e) {
+    console.error('saveProfile:', e)
+    alert('保存失败')
+  }
+}
+
 onMounted(() => {
   if (staff.value === '前台') {
     fetchMembers()
     fetchAllOrders()
   } else if (staff.value === '教练') {
+    fetchMyProfile()
     fetchMyClasses()
     fetchMyOrders()
   }
@@ -1035,7 +1181,7 @@ th { background: #f8f9fa; color: #666; font-weight: 600; }
   margin-bottom: 12px;
 }
 .form-row label { width: 100px; color: #666; }
-.form-row input, .form-row select {
+.form-row input, .form-row select, .form-row textarea {
   flex: 1;
   padding: 8px;
   border: 1px solid #ddd;
@@ -1063,4 +1209,73 @@ th { background: #f8f9fa; color: #666; font-weight: 600; }
   color: #666;
   margin-right: 8px;
 }
+
+.profile-card {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+  background: #fff;
+  border: 1px solid #eee;
+  border-radius: 10px;
+  padding: 20px;
+}
+
+.profile-avatar {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  color: #fff;
+  background: linear-gradient(135deg, #0ea5e9, #f97316);
+}
+.profile-avatar img { width: 100%; height: 100%; object-fit: cover; }
+
+.profile-info { flex: 1; }
+.profile-info h3 { margin: 0 0 4px; color: #333; }
+.profile-meta { color: #888; font-size: 14px; margin: 0 0 8px; }
+.profile-info p { margin: 4px 0; color: #555; }
+.profile-intro { line-height: 1.6; }
+
+.profile-form {
+  margin-top: 16px;
+  background: #fff;
+  border: 1px solid #eee;
+  border-radius: 10px;
+  padding: 20px;
+}
+.form-actions { display: flex; gap: 12px; justify-content: flex-end; margin-top: 16px; }
+
+.avatar-row { align-items: flex-start; }
+.avatar-edit { flex: 1; display: flex; align-items: center; gap: 14px; }
+.avatar-preview {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 26px;
+  background: linear-gradient(135deg, #0ea5e9, #f97316);
+}
+.avatar-preview img { width: 100%; height: 100%; object-fit: cover; }
+.upload-btn {
+  display: inline-block;
+  padding: 9px 22px;
+  background: linear-gradient(135deg, #0ea5e9, #f97316);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+}
+.upload-btn:hover { opacity: 0.9; }
+.avatar-hint { color: #999; font-size: 13px; }
 </style>

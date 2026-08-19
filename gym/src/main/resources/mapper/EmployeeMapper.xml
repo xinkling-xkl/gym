@@ -13,20 +13,30 @@
         SELECT * FROM employee WHERE employee_name = #{employeeName} LIMIT 1
     </select>
 
+    <select id="getEmployeesByStaff" resultType="com.gym.entity.Employee">
+        SELECT * FROM employee WHERE staff = #{staff}
+    </select>
+
     <insert id="addEmployee" parameterType="com.gym.entity.Employee">
-        INSERT INTO employee (employee_account, employee_name, employee_gender, employee_age, entry_time, staff, employee_message, employee_password)
-        VALUES (#{employeeAccount}, #{employeeName}, #{employeeGender}, #{employeeAge}, #{entryTime}, #{staff}, #{employeeMessage}, #{employeePassword})
+        INSERT INTO employee (employee_account, employee_name, avatar, employee_gender, employee_age, specialty, certificate, intro, entry_time, staff, employee_message, employee_password)
+        VALUES (#{employeeAccount}, #{employeeName}, #{avatar}, #{employeeGender}, #{employeeAge}, #{specialty}, #{certificate}, #{intro}, #{entryTime}, #{staff}, #{employeeMessage}, #{employeePassword})
     </insert>
 
     <update id="updateEmployee" parameterType="com.gym.entity.Employee">
-        UPDATE employee SET
-        employee_name = #{employeeName},
-        employee_gender = #{employeeGender},
-        employee_age = #{employeeAge},
-        entry_time = #{entryTime},
-        staff = #{staff},
-        employee_message = #{employeeMessage},
-        employee_password = #{employeePassword}
+        UPDATE employee
+        <set>
+            <if test="employeeName != null">employee_name = #{employeeName},</if>
+            <if test="avatar != null">avatar = #{avatar},</if>
+            <if test="employeeGender != null">employee_gender = #{employeeGender},</if>
+            <if test="employeeAge != null">employee_age = #{employeeAge},</if>
+            <if test="specialty != null">specialty = #{specialty},</if>
+            <if test="certificate != null">certificate = #{certificate},</if>
+            <if test="intro != null">intro = #{intro},</if>
+            <if test="entryTime != null">entry_time = #{entryTime},</if>
+            <if test="staff != null">staff = #{staff},</if>
+            <if test="employeeMessage != null">employee_message = #{employeeMessage},</if>
+            <if test="employeePassword != null">employee_password = #{employeePassword},</if>
+        </set>
         WHERE employee_account = #{employeeAccount}
     </update>
 

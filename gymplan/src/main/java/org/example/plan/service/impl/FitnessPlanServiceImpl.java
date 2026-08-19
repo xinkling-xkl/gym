@@ -6,6 +6,7 @@ import org.example.plan.common.Result;
 import org.example.plan.common.UserContext;
 import org.example.plan.dto.ClassOrderDTO;
 import org.example.plan.dto.ClassTableDTO;
+import org.example.plan.dto.SyncResult;
 import org.example.plan.entity.FitnessPlan;
 import org.example.plan.entity.PlanItem;
 import org.example.plan.mapper.FitnessPlanMapper;
@@ -17,7 +18,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.DayOfWeek;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -97,6 +101,31 @@ public class FitnessPlanServiceImpl implements FitnessPlanService {
 
     @Override
     @Transactional
+    public FitnessPlan createPlanWithItems(FitnessPlan plan) {
+        // 新建计划时，memberAccount 必须使用当前登录用户
+        String currentUser = UserContext.getCurrentAccount();
+        if (currentUser == null) {
+            throw new SecurityException("未登录");
+        }
+        plan.setMemberAccount(Integer.parseInt(currentUser));
+        // 先创建计划主表，planId 通过 useGeneratedKeys 回填
+        fitnessPlanMapper.addPlan(plan);
+
+        // 再批量创建训练项明细
+        if (plan.getItems() != null) {
+            for (PlanItem item : plan.getItems()) {
+                item.setPlanId(plan.getPlanId());
+                if (item.getCompleted() == null) {
+                    item.setCompleted(0);
+                }
+                planItemMapper.addItem(item);
+            }
+        }
+        return plan;
+    }
+
+    @Override
+    @Transactional
     public boolean updatePlan(FitnessPlan plan) {
         checkPlanOwnership(plan.getPlanId());
         return fitnessPlanMapper.updatePlan(plan) > 0;
@@ -151,14 +180,14 @@ public class FitnessPlanServiceImpl implements FitnessPlanService {
 
     @Override
     @Transactional
-    public int syncFromOrders(Integer planId, Integer memberAccount) {
+    public SyncResult syncFromOrders(Integer planId, Integer memberAccount) {
         // 校验：计划存在且属于当前登录用户
         checkPlanOwnership(planId);
 
-        // Feign 调用 gym 服务拉取会员的 BOOKED 订单
+        // Feign 调用 gym 服务拉取会员的全部订单（含各状态，用于失效判断）
         Result<List<ClassOrderDTO>> resp;
         try {
-            resp = gymClient.getOrdersByMemberAndStatus(String.valueOf(memberAccount), "BOOKED");
+            resp = gymClient.getOrdersByMember(String.valueOf(memberAccount));
         } catch (Exception e) {
             log.error("调用 gym 服务获取订单失败: {}", e.getMessage(), e);
             throw new RuntimeException("无法连接课程服务，请稍后重试");
@@ -170,16 +199,39 @@ public class FitnessPlanServiceImpl implements FitnessPlanService {
         }
 
         List<ClassOrderDTO> orders = resp.getData();
-        if (orders.isEmpty()) {
-            return 0;
-        }
 
-        // 遍历订单，去重后插入
-        int inserted = 0;
+        // 有效课程集合：存在任一 BOOKED / CHECKED_IN / COMPLETED 订单的课程
+        // （已签到/已完成的课程训练项保留；同一课程取消后再预约的以有效订单为准）
+        Set<Integer> validClassIds = new HashSet<>();
+        List<ClassOrderDTO> bookedOrders = new ArrayList<>();
         for (ClassOrderDTO order : orders) {
             if (order.getClassId() == null) {
                 continue;
             }
+            String status = order.getStatus();
+            if ("BOOKED".equals(status)) {
+                validClassIds.add(order.getClassId());
+                bookedOrders.add(order);
+            } else if ("CHECKED_IN".equals(status) || "COMPLETED".equals(status)) {
+                validClassIds.add(order.getClassId());
+            }
+        }
+
+        // 1. 删除失效训练项：计划中存在 classId 但已无有效订单（已取消/旷课/订单已删）
+        int removed = 0;
+        List<PlanItem> existingItems = planItemMapper.getItemsByPlanId(planId);
+        if (existingItems != null) {
+            for (PlanItem item : existingItems) {
+                if (item.getClassId() != null && !validClassIds.contains(item.getClassId())) {
+                    planItemMapper.deleteItem(item.getItemId());
+                    removed++;
+                }
+            }
+        }
+
+        // 2. 插入新预约的课程（去重：计划中已存在同 classId 的训练项则跳过）
+        int inserted = 0;
+        for (ClassOrderDTO order : bookedOrders) {
             // 去重：同一计划下相同 classId 的训练项已存在则跳过
             Integer exists = planItemMapper.countByPlanIdAndClassId(planId, order.getClassId());
             if (exists != null && exists > 0) {
@@ -216,8 +268,54 @@ public class FitnessPlanServiceImpl implements FitnessPlanService {
             inserted++;
         }
 
-        log.info("会员 {} 计划 {} 同步课程，新增 {} 项训练项", memberAccount, planId, inserted);
-        return inserted;
+        log.info("会员 {} 计划 {} 同步课程，删除 {} 项失效训练项，新增 {} 项训练项", memberAccount, planId, removed, inserted);
+        return new SyncResult(inserted, removed);
+    }
+
+    /**
+     * 自动同步：将会员课程订单同步到健身计划，无计划则自动创建
+     */
+    @Override
+    @Transactional
+    public SyncResult autoSyncOrders(Integer memberAccount) {
+        // 校验：只能操作自己的数据
+        String currentUser = UserContext.getCurrentAccount();
+        if (currentUser == null) {
+            throw new SecurityException("未登录");
+        }
+        if (!String.valueOf(memberAccount).equals(currentUser)) {
+            throw new SecurityException("无权操作其他会员的数据");
+        }
+
+        // 1. 查询会员计划，优先选 ACTIVE
+        List<FitnessPlan> plans = fitnessPlanMapper.getPlansByMember(memberAccount);
+        FitnessPlan targetPlan = null;
+        if (plans != null) {
+            for (FitnessPlan p : plans) {
+                if ("ACTIVE".equals(p.getStatus())) {
+                    targetPlan = p;
+                    break;
+                }
+            }
+            if (targetPlan == null && !plans.isEmpty()) {
+                targetPlan = plans.get(0);
+            }
+        }
+
+        // 2. 没有计划则创建默认计划
+        if (targetPlan == null) {
+            targetPlan = new FitnessPlan();
+            targetPlan.setMemberAccount(memberAccount);
+            targetPlan.setPlanName("我的训练计划");
+            targetPlan.setGoal("健康");
+            targetPlan.setStartDate(java.time.LocalDate.now());
+            targetPlan.setEndDate(java.time.LocalDate.now().plusMonths(1));
+            targetPlan.setStatus("ACTIVE");
+            fitnessPlanMapper.addPlan(targetPlan);
+        }
+
+        // 3. 同步 BOOKED 订单
+        return syncFromOrders(targetPlan.getPlanId(), memberAccount);
     }
 
     /**

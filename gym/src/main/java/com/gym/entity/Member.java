@@ -1,5 +1,6 @@
 package com.gym.entity;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 
 import java.time.LocalDate;
@@ -7,6 +8,7 @@ import java.time.LocalDate;
 @Data
 public class Member {
     private Integer memberAccount;
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     private String memberPassword;
     private String memberName;
     private String memberGender;

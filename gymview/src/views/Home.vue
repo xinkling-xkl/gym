@@ -196,7 +196,7 @@
           <div class="classes-grid">
             <div v-for="cls in classes" :key="cls.classId" class="class-card">
               <h3>{{ cls.className }}</h3>
-              <p>教练: {{ cls.coach }}</p>
+              <p>教练: <span class="coach-link" @click="showCoachProfile(cls.coach)">{{ cls.coach || '-' }}</span></p>
               <p>时间: {{ formatDate(cls.classBegin) }}</p>
               <p>时长: {{ cls.classTime }}</p>
               <p v-if="cls.maxCapacity" class="capacity-info">已约: {{ cls.bookedCount || 0 }} / {{ cls.maxCapacity }}</p>
@@ -288,6 +288,28 @@
           <button class="logout-btn" @click="showPasswordDialog = false">取消</button>
           <button class="checkin-btn" @click="handleChangePassword">确认修改</button>
         </div>
+      </div>
+    </div>
+
+    <!-- 教练个人信息弹窗 -->
+    <div v-if="showCoachDialog" class="modal-overlay" @click.self="showCoachDialog = false">
+      <div class="modal coach-modal">
+        <button class="modal-close" @click="showCoachDialog = false">×</button>
+        <div v-if="currentCoach" class="coach-profile">
+          <div class="coach-avatar" v-if="currentCoach.avatar">
+            <img :src="coachAvatarUrl(currentCoach.avatar)" alt="教练头像" />
+          </div>
+          <div class="coach-avatar placeholder" v-else>{{ (currentCoach.employeeName || '教')[0] }}</div>
+          <div class="coach-detail">
+            <h3 class="coach-name">{{ currentCoach.employeeName }}</h3>
+            <p class="coach-meta">{{ currentCoach.employeeGender || '-' }} · {{ currentCoach.employeeAge || '-' }}岁 · 教练</p>
+            <p v-if="currentCoach.specialty"><strong>擅长：</strong>{{ currentCoach.specialty }}</p>
+            <p v-if="currentCoach.certificate"><strong>资质：</strong>{{ currentCoach.certificate }}</p>
+            <p v-if="currentCoach.intro" class="coach-intro">{{ currentCoach.intro }}</p>
+            <p v-if="!currentCoach.specialty && !currentCoach.certificate && !currentCoach.intro" class="coach-empty">该教练暂无详细资料</p>
+          </div>
+        </div>
+        <div v-else class="coach-empty">未找到该教练信息</div>
       </div>
     </div>
   </div>
@@ -432,6 +454,38 @@ const fetchEquipments = async () => {
   }
 }
 
+// 教练个人信息弹窗（懒加载教练列表）
+const showCoachDialog = ref(false)
+const currentCoach = ref(null)
+const coaches = ref([])
+const coachesLoaded = ref(false)
+
+const fetchCoaches = async () => {
+  try {
+    const response = await axios.get('/api/employee/coaches')
+    if (response.data.code === 200) {
+      coaches.value = response.data.data || []
+      coachesLoaded.value = true
+    }
+  } catch (error) {
+    console.error('Fetch coaches error:', error)
+  }
+}
+
+const showCoachProfile = async (coachName) => {
+  if (!coachName) return
+  if (!coachesLoaded.value) await fetchCoaches()
+  currentCoach.value = coaches.value.find(c => c.employeeName === coachName) || null
+  showCoachDialog.value = true
+}
+
+// DB 存相对路径如 /avatar/xxx.jpg，通过网关 /pictures 访问
+const coachAvatarUrl = (avatar) => {
+  if (!avatar) return ''
+  if (avatar.startsWith('http')) return avatar
+  return '/pictures' + avatar
+}
+
 const handleCheckIn = async (type) => {
   try {
     const response = await axios.post('/api/checkin', {
@@ -476,6 +530,15 @@ const isClassFull = (cls) => {
 }
 
 const handleOrder = async (cls) => {
+  const remain = cls.maxCapacity ? (cls.maxCapacity - (cls.bookedCount || 0)) : null
+  const info = [
+    `课程：${cls.className}`,
+    `教练：${cls.coach || '-'}`,
+    `时间：${formatDate(cls.classBegin)}`,
+    `时长：${cls.classTime || '-'}`,
+    remain != null ? `剩余名额：${remain} 个` : '名额：不限'
+  ].join('\n')
+  if (!confirm(`确认预约以下课程吗？\n\n${info}`)) return
   try {
     const response = await axios.post('/api/order/add', {
       classId: cls.classId,
@@ -1128,6 +1191,58 @@ th {
   gap: 12px;
   margin-top: 20px;
 }
+
+/* 教练名字链接 */
+.coach-link {
+  color: #0ea5e9;
+  cursor: pointer;
+  text-decoration: underline;
+}
+.coach-link:hover { color: #f97316; }
+
+/* 教练个人信息弹窗 */
+.coach-modal { position: relative; width: 440px; }
+
+.modal-close {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 50%;
+  background: #f1f3f5;
+  color: #666;
+  font-size: 18px;
+  line-height: 28px;
+  cursor: pointer;
+  padding: 0;
+}
+.modal-close:hover { background: #e5e7eb; color: #333; }
+
+.coach-profile { display: flex; gap: 18px; align-items: flex-start; }
+
+.coach-avatar {
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 30px;
+  background: linear-gradient(135deg, #0ea5e9, #f97316);
+}
+.coach-avatar img { width: 100%; height: 100%; object-fit: cover; }
+
+.coach-detail { flex: 1; }
+.coach-name { margin: 0 0 6px; color: #333; }
+.coach-meta { color: #888; font-size: 14px; margin: 0 0 10px; }
+.coach-detail p { margin: 5px 0; color: #555; font-size: 14px; }
+.coach-intro { line-height: 1.6; }
+.coach-empty { color: #999; text-align: center; padding: 20px 0; }
 
 .header-avatar {
   width: 40px;

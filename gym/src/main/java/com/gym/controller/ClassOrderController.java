@@ -111,6 +111,8 @@ public class ClassOrderController {
             return Result.error(400, "课程已结束，无法预约");
         } else if (result == -8) {
             return Result.error(429, "当前预约人数较多，请稍后重试");
+        } else if (result == -9) {
+            return Result.error(400, "该时段您已预约其他课程，请勿重复预约");
         } else {
             return Result.error(404, "会员不存在");
         }

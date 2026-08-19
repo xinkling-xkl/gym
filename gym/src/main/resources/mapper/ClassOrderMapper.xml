@@ -83,6 +83,12 @@
         WHERE class_id = #{classId} AND status = 'BOOKED'
     </select>
 
+    <select id="getBookedOrdersInRange" resultMap="ClassOrderMap">
+        SELECT * FROM class_order
+        WHERE status = 'BOOKED'
+          AND class_begin BETWEEN #{start} AND #{end}
+    </select>
+
     <delete id="deleteOrder">
         DELETE FROM class_order WHERE class_order_id = #{classOrderId}
     </delete>
