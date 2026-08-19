@@ -70,4 +70,20 @@
     <select id="getPlanIdByItemId" resultType="java.lang.Integer">
         SELECT plan_id FROM plan_item WHERE item_id = #{itemId}
     </select>
+
+    <!-- 同步清理：删除计划下所有同步自课程的训练项（无当前订单时用） -->
+    <delete id="deleteSyncedItemsByPlanId">
+        DELETE FROM plan_item WHERE plan_id = #{planId} AND class_id IS NOT NULL
+    </delete>
+
+    <!-- 同步清理：删除计划下 class_id 不在当前订单集合中的训练项 -->
+    <delete id="deleteSyncedItemsNotInClassIds">
+        DELETE FROM plan_item
+        WHERE plan_id = #{planId}
+          AND class_id IS NOT NULL
+          AND class_id NOT IN
+        <foreach collection="classIds" item="cid" open="(" separator="," close=")">
+            #{cid}
+        </foreach>
+    </delete>
 </mapper>

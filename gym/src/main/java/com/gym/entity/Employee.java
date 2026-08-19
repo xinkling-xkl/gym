@@ -18,6 +18,7 @@ public class Employee {
     private Date entryTime;
     private String staff;
     private String employeeMessage;
+
     @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     private String employeePassword;
 }

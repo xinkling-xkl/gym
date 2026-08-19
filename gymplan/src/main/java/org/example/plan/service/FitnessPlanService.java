@@ -1,6 +1,5 @@
 package org.example.plan.service;
 
-import org.example.plan.dto.SyncResult;
 import org.example.plan.entity.FitnessPlan;
 import org.example.plan.entity.PlanItem;
 
@@ -29,21 +28,18 @@ public interface FitnessPlanService {
 
     // ===== 同步课程订单 =====
     /**
-     * 从 gym 主服务同步会员课程订单到指定计划（差量同步）
-     * - 新预约（BOOKED）的课程插入训练项
-     * - 已取消/旷课（CANCELLED/NO_SHOW）的课程训练项删除
-     * - 已签到/已完成（CHECKED_IN/COMPLETED）的课程训练项保留
+     * 从 gym 主服务同步会员已预约课程到指定计划
      * @param planId 目标计划ID
      * @param memberAccount 会员账号
-     * @return 同步结果（新增数、移除数）
+     * @return 新增的训练项数量
      */
-    SyncResult syncFromOrders(Integer planId, Integer memberAccount);
+    int syncFromOrders(Integer planId, Integer memberAccount);
 
     /**
-     * 自动同步：将会员课程订单同步到健身计划
+     * 自动同步：将会员已预约课程同步到健身计划
      * 若会员没有计划则自动创建一个默认计划（ACTIVE）
      * @param memberAccount 会员账号
-     * @return 同步结果（新增数、移除数）
+     * @return 新增的训练项数量
      */
-    SyncResult autoSyncOrders(Integer memberAccount);
+    int autoSyncOrders(Integer memberAccount);
 }

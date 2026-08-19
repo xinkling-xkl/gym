@@ -1,6 +1,7 @@
 package org.example.plan.mapper;
 
 import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
 import org.example.plan.entity.PlanItem;
 
 import java.util.List;
@@ -30,4 +31,10 @@ public interface PlanItemMapper {
 
     /** 通过训练项ID查询所属计划ID（用于越权校验） */
     Integer getPlanIdByItemId(Integer itemId);
+
+    /** 删除某计划下所有同步自课程的训练项（class_id 不为空），用于无当前订单时清空 */
+    int deleteSyncedItemsByPlanId(Integer planId);
+
+    /** 删除某计划下 class_id 不在指定集合中的同步训练项，用于清理已取消预约的课程 */
+    int deleteSyncedItemsNotInClassIds(@Param("planId") Integer planId, @Param("classIds") List<Integer> classIds);
 }

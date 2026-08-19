@@ -148,17 +148,9 @@ public class AiChatController {
      */
     private String executeMemberCommand(String reply, String account, List<Map<String, String>> history, String role, Integer userId) {
         try {
-            int cmdStart = reply.indexOf("[CMD:");
-            int cmdEnd = reply.indexOf("]", cmdStart);
-            if (cmdStart == -1 || cmdEnd == -1) return reply;
-
-            String cmdPart = reply.substring(cmdStart + 5, cmdEnd);
-            String[] parts = cmdPart.split("\\{", 2);
-            String action = parts[0].trim();
-            String jsonStr = parts.length > 1 ? "{" + parts[1] : "{}";
-            JSONObject params = JSON.parseObject(jsonStr);
-
-            return executeMemberAction(action, params, account, history, role, userId);
+            ParsedCommand cmd = parseCommand(reply);
+            if (cmd == null) return reply;
+            return executeMemberAction(cmd.action, cmd.params, account, history, role, userId);
         } catch (Exception e) {
             return "命令执行失败：" + e.getMessage();
         }
@@ -276,14 +268,15 @@ public class AiChatController {
                 yield callMainServer("/api/order/cancel/" + orderId, "POST", null, account);
             }
             case "CREATE_PLAN" -> {
-                // 创建健身计划：调用 plan-server 服务
-                JSONObject planBody = new JSONObject();
-                planBody.put("planName", p.getString("planName"));
-                planBody.put("goal", p.getString("goal"));
-                planBody.put("startDate", p.getString("startDate"));
-                planBody.put("endDate", p.getString("endDate"));
-                planBody.put("status", "ACTIVE");
-                yield callPlanServer("/api/plan/add", "POST", planBody, account);
+                // 创建健身计划（含训练项）：根据目标和身体数据生成训练项明细
+                String planName = p.getString("planName");
+                String goal = p.getString("goal");
+                String startDate = p.getString("startDate");
+                String endDate = p.getString("endDate");
+                if (goal == null || goal.isEmpty()) {
+                    goal = "健康";
+                }
+                yield createPlanWithItems(account, planName, goal, startDate, endDate);
             }
             case "QUERY_MY_PLANS" -> formatPlans(callPlanServerResult("/api/plan/member/" + account, "GET", null, account));
             case "QUERY_MY_BMI" -> {
@@ -391,56 +384,66 @@ public class AiChatController {
      * 智能创建健身计划：根据会员 BMI 和目标自动生成计划及训练项
      */
     private String smartCreatePlan(String account, String goal) {
+        String planName = switch (goal) {
+            case "增肌" -> "智能增肌计划";
+            case "减脂" -> "智能减脂计划";
+            case "塑形" -> "智能塑形计划";
+            default -> "智能健康计划";
+        };
+        return createPlanWithItems(account, planName, goal, null, null);
+    }
+
+    /**
+     * 创建健身计划（含训练项明细）
+     * 根据目标和会员身体数据（BMI）生成合理的训练项，一次性创建计划 + 训练项
+     */
+    private String createPlanWithItems(String account, String planName, String goal, String startDate, String endDate) {
         try {
-            // 1. 查询会员身体数据
+            // 1. 查询会员身体数据（用于计算 BMI 生成更贴合的训练项，缺失时按通用方案）
+            Double height = null;
+            Double weight = null;
             JSONObject member = callMainServerForData("/api/member/" + account, "GET", null, account);
-            if (member == null) {
-                return "创建失败：无法获取您的身体数据";
+            if (member != null) {
+                height = member.getDouble("memberHeight");
+                weight = member.getDouble("memberWeight");
             }
-            Double height = member.getDouble("memberHeight");
-            Double weight = member.getDouble("memberWeight");
-            if (height == null || weight == null || height <= 0) {
-                return "创建失败：您的身高或体重信息不完整，请先到前台补全个人资料";
+            double bmi = 22.0;
+            if (height != null && weight != null && height > 0) {
+                bmi = weight / ((height / 100.0) * (height / 100.0));
             }
 
-            // 2. 计算 BMI
-            double heightM = height / 100.0;
-            double bmi = weight / (heightM * heightM);
-
-            // 3. 根据目标 + BMI 生成训练项明细
+            // 2. 生成训练项明细
             JSONArray items = buildPlanItems(goal, bmi);
 
-            // 4. 构造计划（含训练项）
+            // 3. 构造计划（含训练项）
             JSONObject plan = new JSONObject();
-            String planName = switch (goal) {
-                case "增肌" -> "智能增肌计划";
-                case "减脂" -> "智能减脂计划";
-                case "塑形" -> "智能塑形计划";
-                default -> "智能健康计划";
-            };
-            plan.put("planName", planName);
+            plan.put("planName", (planName != null && !planName.isEmpty()) ? planName : "我的健身计划");
             plan.put("goal", goal);
             plan.put("status", "ACTIVE");
-
-            // 起止日期：今天 → 一个月后
-            java.time.LocalDate start = java.time.LocalDate.now();
-            java.time.LocalDate end = start.plusMonths(1);
+            java.time.LocalDate start = (startDate != null && !startDate.isEmpty())
+                    ? java.time.LocalDate.parse(startDate) : java.time.LocalDate.now();
+            java.time.LocalDate end = (endDate != null && !endDate.isEmpty())
+                    ? java.time.LocalDate.parse(endDate) : start.plusMonths(1);
             plan.put("startDate", start.toString());
             plan.put("endDate", end.toString());
             plan.put("items", items);
 
-            // 5. 调用 plan-server 一次性创建计划 + 训练项
+            // 4. 调用 plan-server 一次性创建计划 + 训练项
             JSONObject result = callPlanServerResult("/api/plan/createWithItems", "POST", plan, account);
             if (result == null || result.getInteger("code") == null || result.getInteger("code") != 200) {
                 return "创建失败：" + (result != null ? result.getString("message") : "服务不可用");
             }
 
-            // 6. 生成友好文本（含训练项清单）
+            // 5. 生成友好文本（含训练项清单）
             StringBuilder sb = new StringBuilder();
-            sb.append("🏋️ 根据您的身体数据已生成专属健身计划\n");
+            sb.append("🏋️ 已为您创建健身计划「").append(plan.getString("planName")).append("」\n");
             sb.append("━━━━━━━━━━━━━━━\n");
-            sb.append(String.format("身高：%.1f cm | 体重：%.1f kg | BMI：%.1f（%s）\n",
-                    height, weight, bmi, bmiCategory(bmi)));
+            if (height != null && weight != null && height > 0) {
+                sb.append(String.format("身高：%.1f cm | 体重：%.1f kg | BMI：%.1f（%s）\n",
+                        height, weight, bmi, bmiCategory(bmi)));
+            } else {
+                sb.append("未检测到身高体重，已按通用方案生成\n");
+            }
             sb.append(String.format("目标：%s\n", goal));
             sb.append(String.format("周期：%s 至 %s\n", start, end));
             sb.append("━━━━━━━━━━━━━━━\n");
@@ -458,7 +461,7 @@ public class AiChatController {
             sb.append("\n✅ 计划及训练项已创建，请在「健身计划」页面查看详情");
             return sb.toString();
         } catch (Exception e) {
-            return "智能创建计划失败：" + e.getMessage();
+            return "创建计划失败：" + e.getMessage();
         }
     }
 
@@ -749,19 +752,49 @@ public class AiChatController {
      */
     private String executeAdminCommand(String reply) {
         try {
-            int cmdStart = reply.indexOf("[CMD:");
-            int cmdEnd = reply.indexOf("]", cmdStart);
-            if (cmdStart == -1 || cmdEnd == -1) return reply;
-
-            String cmdPart = reply.substring(cmdStart + 5, cmdEnd);  // 如 ADD_MEMBER
-            String[] parts = cmdPart.split("\\{", 2);
-            String action = parts[0].trim();
-            String jsonStr = parts.length > 1 ? "{" + parts[1] : "{}";
-            JSONObject params = JSON.parseObject(jsonStr);
-
-            return executeAction(action, params);
+            ParsedCommand cmd = parseCommand(reply);
+            if (cmd == null) return reply;
+            return executeAction(cmd.action, cmd.params);
         } catch (Exception e) {
             return "命令执行失败：" + e.getMessage();
+        }
+    }
+
+    /**
+     * 解析 AI 回复中的命令，支持两种格式：
+     * 1. [CMD:ACTION]{json}  （json 位于 ] 之后，当前提示词使用的格式）
+     * 2. [CMD:ACTION{json}]  （json 位于 ] 之内，兼容旧格式）
+     */
+    private ParsedCommand parseCommand(String reply) {
+        int cmdStart = reply.indexOf("[CMD:");
+        if (cmdStart == -1) return null;
+        int cmdEnd = reply.indexOf("]", cmdStart);
+        if (cmdEnd == -1) return null;
+
+        String inner = reply.substring(cmdStart + 5, cmdEnd).trim();
+        String action;
+        String jsonStr;
+        int braceIdx = inner.indexOf('{');
+        if (braceIdx >= 0) {
+            // json 在 ] 之内：[CMD:BOOK_CLASS{"classId":16}]
+            action = inner.substring(0, braceIdx).trim();
+            jsonStr = inner.substring(braceIdx);
+        } else {
+            // json 在 ] 之后：[CMD:BOOK_CLASS]{"classId":16}
+            action = inner;
+            String afterBracket = reply.substring(cmdEnd + 1).trim();
+            jsonStr = afterBracket.startsWith("{") ? afterBracket : "{}";
+        }
+        return new ParsedCommand(action, JSON.parseObject(jsonStr));
+    }
+
+    private static class ParsedCommand {
+        final String action;
+        final JSONObject params;
+
+        ParsedCommand(String action, JSONObject params) {
+            this.action = action;
+            this.params = params;
         }
     }
 

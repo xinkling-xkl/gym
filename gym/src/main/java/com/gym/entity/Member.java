@@ -8,6 +8,7 @@ import java.time.LocalDate;
 @Data
 public class Member {
     private Integer memberAccount;
+
     @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     private String memberPassword;
     private String memberName;

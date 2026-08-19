@@ -55,9 +55,9 @@ public class EmployeeServiceImpl implements EmployeeService {
             if (currentAccount == null || !currentAccount.equals(employee.getEmployeeAccount())) {
                 throw new IllegalStateException("无权修改他人资料");
             }
-            Employee originForStaff = employeeMapper.getEmployeeByAccount(employee.getEmployeeAccount());
-            if (originForStaff != null) {
-                employee.setStaff(originForStaff.getStaff());
+            Employee origin = employeeMapper.getEmployeeByAccount(employee.getEmployeeAccount());
+            if (origin != null) {
+                employee.setStaff(origin.getStaff());
             }
         }
 
